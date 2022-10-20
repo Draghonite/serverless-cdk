@@ -6,6 +6,8 @@
 - Managing of CloudFormation automation code for stacks involving:
   - Infrastructure (including provisioning of TODO);
 
+![Architecture Diagram](architecture.png)
+
 The `cdk.json` file tells the CDK Toolkit how to execute the app.
 
 ## Useful commands
