@@ -10,6 +10,7 @@ export const InfrastructureConfig = {
     appBucketNameOutput: 'ServerlessAppBucketName',
     appBucketMultiRegionAccessPointName: 'serverless-app-mrap',
     appLambdaName: 'serverless-app',
+    s3ReplicationRoleName: 'serverless_app_s3_replication_role',
     isS3ReplicationEnabled: true,
     isS3ReplicationMetricsEnabled: true, // https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-metrics.html
     isS3ReplicationTimeEnabled: true, // https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-time-control.html // NOTE: in the UI, replicationTime, if enabled, makes metrics automatically enabled and prevents from being disabled -- this is accounted for in code
