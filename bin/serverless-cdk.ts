@@ -6,9 +6,7 @@ import * as uuid from 'uuid';
 import { ServerlessInfrastructureStack } from '../lib/infrastructure/serverless-infrastructure-stack';
 // import { ServerlessDRInfrastructureStack } from '../lib/infrastructure/serverless-dr-infrastructure-stack';
 import { AppProps } from 'aws-cdk-lib';
-// import { S3ReplicationRoleCreator } from '../temp/iam_create_replication_role'; 
 
-// TODO: allow override from environment
 const infrastructureConfig = InfrastructureConfig;
 const primaryRegion = 'us-west-1';
 const secondaryRegion = 'us-west-2';
@@ -57,14 +55,3 @@ const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessI
 // disasterRecoverPrimaryStack.addDependency(secondaryRegionStack);
 // disasterRecoverSecondaryStack.addDependency(primaryRegionStack);
 // disasterRecoverSecondaryStack.addDependency(secondaryRegionStack);
-
-// TODO: run only for deploy
-// NOTE: create the role used for bidirectional replication in S3
-// const primaryRegionId = regionIdMap.get(primaryRegion);
-// const secondaryRegionId = regionIdMap.get(secondaryRegion);
-// const appPrimaryBucketName = `${infrastructureConfig.appBucketName}-${primaryRegion}-${primaryRegionId.uuid}`;
-// const appSecondaryBucketName = `${infrastructureConfig.appBucketName}-${secondaryRegion}-${secondaryRegionId.uuid}`;
-// new S3ReplicationRoleCreator(infrastructureConfig.s3ReplicationRoleName, primaryRegion, secondaryRegion, appPrimaryBucketName, appSecondaryBucketName);
-
-// TODO: apply bidirectional replication rules to the buckets but only after the buckets are created
-// ...any way to make this wait?
