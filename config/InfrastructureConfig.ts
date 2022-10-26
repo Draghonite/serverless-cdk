@@ -16,6 +16,8 @@ export const InfrastructureConfig = {
     isS3ReplicationTimeEnabled: true, // https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-time-control.html // NOTE: in the UI, replicationTime, if enabled, makes metrics automatically enabled and prevents from being disabled -- this is accounted for in code
     isS3ReplicationDeleteMarkerEnabled: true, // https://docs.aws.amazon.com/AmazonS3/latest/userguide/delete-marker-replication.html
     isS3ReplicationModificationsEnabled: true, // https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-for-metadata-changes.html
+    dnsZoneName: 'serverlessapp{uid}.com',
+    dnsZoneOutput: 'ServerlessHostedZoneUrl',
     // availabilityZones: 3,
     globalDatabaseClusterName: 'global-serverless-db-cluster',
     databaseParameterGroupName: 'default.aurora-postgresql13',

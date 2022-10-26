@@ -4,7 +4,7 @@ import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import * as uuid from 'uuid';
 import { ServerlessInfrastructureStack } from '../lib/infrastructure/serverless-infrastructure-stack';
-// import { ServerlessDRInfrastructureStack } from '../lib/infrastructure/serverless-dr-infrastructure-stack';
+import { ServerlessSharedInfrastructureStack } from '../lib/infrastructure/serverless-shared-infrastructure-stack';
 import { AppProps } from 'aws-cdk-lib';
 
 const infrastructureConfig = InfrastructureConfig;
@@ -39,19 +39,8 @@ const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessI
     }
 });
 
-// const disasterRecoverPrimaryStack = new ServerlessDRInfrastructureStack(app, 'ServerlessDRInfrastructurePrimaryStack', {
-//     env: {
-//         region: primaryRegion
-//     }
-// });
+const sharedStack = new ServerlessSharedInfrastructureStack(app, 'ServerlessSharedInfrastructureStack');
 
-// const disasterRecoverSecondaryStack = new ServerlessDRInfrastructureStack(app, 'ServerlessDRInfrastructureSecondaryStack', {
-//     env: {
-//         region: secondaryRegion
-//     }
-// });
-
-// disasterRecoverPrimaryStack.addDependency(primaryRegionStack);
-// disasterRecoverPrimaryStack.addDependency(secondaryRegionStack);
-// disasterRecoverSecondaryStack.addDependency(primaryRegionStack);
-// disasterRecoverSecondaryStack.addDependency(secondaryRegionStack);
+// TODO: re-enable
+// sharedStack.addDependency(primaryRegionStack);
+// sharedStack.addDependency(secondaryRegionStack);

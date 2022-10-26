@@ -1,4 +1,4 @@
-import { InfrastructureConfig } from './../../config/InfrastructureConfig';
+import { InfrastructureConfig } from '../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
@@ -10,8 +10,10 @@ import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
 import { CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import { Effect, PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { Bucket, CfnBucket, CfnMultiRegionAccessPoint } from 'aws-cdk-lib/aws-s3';
+import { HostedZone } from 'aws-cdk-lib/aws-route53';
+import { Certificate, CertificateValidation } from 'aws-cdk-lib/aws-certificatemanager';
 
-export class ServerlessDRInfrastructureStack extends cdk.Stack {
+export class ServerlessSharedInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
@@ -24,7 +26,26 @@ export class ServerlessDRInfrastructureStack extends cdk.Stack {
         const accountId: string = scope.node.tryGetContext('account');
         const region = regionId?.region ?? props?.env?.region;
         const account = accountId ?? props?.env?.account;
+        const zoneName = infrastructureConfig.dnsZoneName.replace('{uid}', 'abcdef'); // TODO: replace w/ shortId to make unique
 
-        // TODO: reserved for any shared infrastructure
+        const dnsZone = new HostedZone(this, 'ServerlessHostedZone', {
+            zoneName: zoneName,
+        });
+        const dsnZoneOutput = new CfnOutput(this, 'ServerlessHostedZoneOutput', {
+            exportName: infrastructureConfig.dnsZoneOutput,
+            value: zoneName
+        });
+
+        const sslCert = new Certificate(this, 'ServerlessCertificate', {
+            domainName: zoneName,
+            validation: CertificateValidation.fromDns(dnsZone),
+            subjectAlternativeNames: [
+                `www.${zoneName}`,
+                zoneName,
+                `web.${zoneName}`
+            ]
+        });
+
+
     }
 }
