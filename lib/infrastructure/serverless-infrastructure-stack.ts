@@ -9,94 +9,124 @@ import * as uuid from 'uuid';
 import { AuroraEngineVersion, AuroraPostgresEngineVersion, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, PostgresEngineVersion, SubnetGroup } from 'aws-cdk-lib/aws-rds';
 import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
 import { CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
-import { PolicyStatement, Role, ServicePrincipal, Effect } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal } from 'aws-cdk-lib/aws-iam';
 
 export class ServerlessInfrastructureStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     const infrastructureConfig = InfrastructureConfig;
+    
     const regionIdMap: Map<string, any> = scope.node.tryGetContext('regionIdMap');
     const regionId = regionIdMap.get(props?.env?.region || '');
-    const uniqueId = regionId?.uuid ?? uuid.v4();
+    const shortId: string = scope.node.tryGetContext('shortId');
+    // const uniqueId = regionId?.uuid ?? uuid.v4();
     const region = regionId?.region ?? props?.env?.region;
+    const destinationBucketRegion = Array.from(regionIdMap.keys()).filter(x => x !== region)[0];
 
     // TODO: add consistent tags to the resources -- "appname: serverless"
 
     // NOTE: the subnets are created but not associated to the vpc via the vpc's route table -- actually, each subnet gets its own route table?!
     // ...this an issue at all?!  see if missing subnet group is the reason
-    const vpc = new Vpc(this, 'ServerlessVPC', {
-        vpcName: infrastructureConfig.vpcName,
-        cidr: infrastructureConfig.vpcCIDR,
-        natGateways: 0,
-        vpnGateway: false,
-        maxAzs: 3,
-        subnetConfiguration: [
-            {
-                name: 'PrivateSubnetLambda1',
-                subnetType: SubnetType.PRIVATE_ISOLATED
-            },
-            {
-                name: 'PrivateSubnetRDS1',
-                subnetType: SubnetType.PRIVATE_ISOLATED
-            },
-            {
-                name: 'PrivateSubnetRDS2',
-                subnetType: SubnetType.PRIVATE_ISOLATED
-            }
-        ]
-    });
-    new CfnOutput(this, 'ServerlessVPCIdOutput', {
-        value: vpc.vpcId,
-        exportName: infrastructureConfig.vpcIdOutput
-    });
+    // const vpc = new Vpc(this, 'ServerlessVPC', {
+    //     vpcName: infrastructureConfig.vpcName,
+    //     cidr: infrastructureConfig.vpcCIDR,
+    //     natGateways: 0,
+    //     vpnGateway: false,
+    //     maxAzs: 3,
+    //     subnetConfiguration: [
+    //         {
+    //             name: 'PrivateSubnetLambda1',
+    //             subnetType: SubnetType.PRIVATE_ISOLATED
+    //         },
+    //         {
+    //             name: 'PrivateSubnetRDS1',
+    //             subnetType: SubnetType.PRIVATE_ISOLATED
+    //         },
+    //         {
+    //             name: 'PrivateSubnetRDS2',
+    //             subnetType: SubnetType.PRIVATE_ISOLATED
+    //         }
+    //     ]
+    // });
+    // new CfnOutput(this, 'ServerlessVPCIdOutput', {
+    //     value: vpc.vpcId,
+    //     exportName: infrastructureConfig.vpcIdOutput
+    // });
     
     // TODO: configure security group(s) for the VPC to allow common protocols: 80, 443, 5432
 
+    // const appBucketArn = `arn:aws:s3:::${infrastructureConfig.appBucketName}-${shortId}-${region}`;
+    // const destinationBucketArn = `arn:aws:s3:::${infrastructureConfig.appBucketName}-${shortId}-${destinationBucketRegion}`;
+
     const appBucket = new Bucket(this, 'LambdaAppBucket', {
         // NOTE: to satisfy global-uniqueness constraint but update as needed; should revisit and remove unawanted S3 buckets that would linger
-        bucketName: `${infrastructureConfig.appBucketName}-${region}-${uniqueId}`,
+        bucketName: `${infrastructureConfig.appBucketName}-${shortId}-${region}`,
         versioned: true,
         blockPublicAccess: BlockPublicAccess.BLOCK_ALL
     });
-    new CfnOutput(this, 'ServerlessLambdaAppBucketArnOutput', {
-        value: appBucket.bucketArn,
-        exportName: infrastructureConfig.appBucketArnOutput
-    });
-    new CfnOutput(this, 'ServerlessLambdaAppBucketNameOutput', {
-        value: appBucket.bucketName,
-        exportName: infrastructureConfig.appBucketNameOutput
-    });
+    // new CfnOutput(this, 'ServerlessLambdaAppBucketArnOutput', {
+    //     value: appBucket.bucketArn,
+    //     exportName: infrastructureConfig.appBucketArnOutput
+    // });
+    // new CfnOutput(this, 'ServerlessLambdaAppBucketNameOutput', {
+    //     value: appBucket.bucketName,
+    //     exportName: infrastructureConfig.appBucketNameOutput
+    // });
+
+    // NOTE: testing only -- do not configure replication on secondary region to allow primary region to complete setup
+    // if (region === 'us-west-1') {
+        // const cfnAppBucket = appBucket.node.defaultChild as CfnBucket;
+        // (appBucket.node.defaultChild as CfnBucket).replicationConfiguration = {
+        //     role: Role.fromRoleName(this, 'ImportedRoleName', `${infrastructureConfig.s3ReplicationRoleName}-${shortId}`).roleArn,
+        //     rules: [
+        //         {
+        //             id: `s3-replication-rule-${destinationBucketRegion}`,
+        //             priority: 0,
+        //             filter: { prefix: '' },
+        //             status: 'Enabled',
+        //             sourceSelectionCriteria: { replicaModifications: { status: 'Enabled' } },
+        //             prefix: '',
+        //             destination: {
+        //                 bucket: `arn:aws:s3:::${infrastructureConfig.appBucketName}-${destinationBucketRegion}-${shortId}`,
+        //                 replicationTime: { status: 'Enabled', time: { minutes: 15 } },
+        //                 metrics: { status: 'Enabled', eventThreshold: { minutes: 15 } }
+        //             },
+        //             deleteMarkerReplication: { status: 'Enabled' }
+        //         }
+        //     ]
+        // };
+    // }
 
     // TODO: ensure the lambda function has code for testing database connectivity -- use 'pg' node module and query against a standard sys database, or some other query
     // TODO: add a function for basic heart-beat check: access to db should suffice; return 200: OK
-    const lambdaApp = new lambda.Function(this, 'LamdaAppHandler', {
-        functionName: infrastructureConfig.appLambdaName,
-        runtime: lambda.Runtime.NODEJS_16_X,
-        code: lambda.Code.fromAsset('resources'),
-        handler: 'widgets.main',
-        environment: {
-            BUCKET: appBucket.bucketName
-        },
-        memorySize: 128,
-        timeout: cdk.Duration.seconds(30),
-        // vpc: vpc,
-        // vpcSubnets: {
-        //     subnetGroupName: 'PrivateSubnetLambda'
-        // }
-    });
+    // const lambdaApp = new lambda.Function(this, 'LamdaAppHandler', {
+    //     functionName: infrastructureConfig.appLambdaName,
+    //     runtime: lambda.Runtime.NODEJS_16_X,
+    //     code: lambda.Code.fromAsset('resources'),
+    //     handler: 'widgets.main',
+    //     environment: {
+    //         BUCKET: appBucket.bucketName
+    //     },
+    //     memorySize: 128,
+    //     timeout: cdk.Duration.seconds(30),
+    //     // vpc: vpc,
+    //     // vpcSubnets: {
+    //     //     subnetGroupName: 'PrivateSubnetLambda'
+    //     // }
+    // });
 
-    appBucket.grantReadWrite(lambdaApp);
+    // appBucket.grantReadWrite(lambdaApp);
 
     // TODO: add an api-endpoint for health-checks at "/health"; should execute the appropriate lambda function
-    const api = new apigateway.RestApi(this, 'ServerlessAPI', {
-        restApiName: infrastructureConfig.restApiName,
-        description: infrastructureConfig.restApiDescription
-    });
+    // const api = new apigateway.RestApi(this, 'ServerlessAPI', {
+    //     restApiName: infrastructureConfig.restApiName,
+    //     description: infrastructureConfig.restApiDescription
+    // });
 
-    api.root.addMethod('GET', new apigateway.LambdaIntegration(lambdaApp, {
-        requestTemplates: { 'application/json': '{ "statusCode": "200" }' }
-    }));
+    // api.root.addMethod('GET', new apigateway.LambdaIntegration(lambdaApp, {
+    //     requestTemplates: { 'application/json': '{ "statusCode": "200" }' }
+    // }));
 
     // TODO: consider if this (or at least route 53 config) belongs in dr infrastructure stack
     // see https://sbstjn.com/blog/aws-cdk-lambda-loadbalancer-vpc-certificate/
@@ -107,19 +137,19 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
       // ...not including the 2 planned above where 1 AZ is for Blue, 1 for Green -- these would not provide high availability
       // ...so would this solution require 3 AZs in each environment -- 12 total?!
     // NOTE: may need to move this to another stack -- prerequisite: 2 regions, 2 AZs, 2 db subnet groups (1 in each region) -- must first exist
-    const dbSubnetGroup = new SubnetGroup(this, 'ServerlessDbSubnetGroup', {
-        vpc: vpc,
-        subnetGroupName: infrastructureConfig.databaseSubnetGroupName,
-        description: infrastructureConfig.databaseSubnetGroupDescription,
-        vpcSubnets: {
-            // availabilityZones: ['us-west-1a'],
-            onePerAz: true,
-            // subnetFilters: '',
-            // subnetGroupName: infrastructureConfig.databaseSubnetGroupName,
-            // subnetType: SubnetType.PRIVATE_ISOLATED,
-            subnets: vpc.isolatedSubnets // TODO: filter and ensure only the 'PrivateSubnetRDSX' subnets are used
-        }
-    });
+    // const dbSubnetGroup = new SubnetGroup(this, 'ServerlessDbSubnetGroup', {
+    //     vpc: vpc,
+    //     subnetGroupName: infrastructureConfig.databaseSubnetGroupName,
+    //     description: infrastructureConfig.databaseSubnetGroupDescription,
+    //     vpcSubnets: {
+    //         // availabilityZones: ['us-west-1a'],
+    //         onePerAz: true,
+    //         // subnetFilters: '',
+    //         // subnetGroupName: infrastructureConfig.databaseSubnetGroupName,
+    //         // subnetType: SubnetType.PRIVATE_ISOLATED,
+    //         subnets: vpc.isolatedSubnets // TODO: filter and ensure only the 'PrivateSubnetRDSX' subnets are used
+    //     }
+    // });
 
     // TODO: create a cost-effective Aurora Postgres RDS cluster on the dedicated private subnet of the new vpc
     // TODO: should be compatible with Aurora Global Database -- see engine and instance size requirements

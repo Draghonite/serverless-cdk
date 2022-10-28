@@ -10,6 +10,7 @@ export const InfrastructureConfig = {
     appBucketNameOutput: 'ServerlessAppBucketName',
     appBucketMultiRegionAccessPointName: 'serverless-app-mrap',
     appLambdaName: 'serverless-app',
+    lambdaCustomHandlerName: 'serverless-app-lambda-provider',
     s3ReplicationRoleName: 'serverless_app_s3_replication_role',
     isS3ReplicationEnabled: true,
     isS3ReplicationMetricsEnabled: true, // https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-metrics.html
@@ -24,5 +25,9 @@ export const InfrastructureConfig = {
     databaseSubnetGroupName: 'serverless-db-subnet-group',
     databaseSubnetGroupDescription: 'Database subnet group',
     databaseClusterName: 'severless-db-cluster',
-    databaseName: 'serverless'
+    databaseName: 'serverless',
+    regions: {
+        primary: 'us-west-1',
+        secondary: 'us-west-2'
+    }
 }
