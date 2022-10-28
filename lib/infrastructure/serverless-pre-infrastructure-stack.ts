@@ -30,6 +30,7 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
             path: '/service-role/',
             roleName: `${infrastructureConfig.s3ReplicationRoleName}-${shortId}`
         });
+        // TODO: ensure the policy includes permissions for kms-encrypted objects -- https://sbstjn.com/blog/aws-cdk-s3-cross-region-replication-kms/
         s3ReplicationRole.addToPolicy(
             new PolicyStatement({
                 effect: Effect.ALLOW,

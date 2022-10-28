@@ -33,6 +33,7 @@ const addReplication = (context) => {
     return new Promise((resolve) => {
         (new S3Client({ region: context.SourceRegion })).send(new PutBucketReplicationCommand({
             Bucket: context.SourceBucketName,
+            // TODO: enure to include replication of kms-encrypted objects by setting the appropriate options -- https://sbstjn.com/blog/aws-cdk-s3-cross-region-replication-kms/
             ReplicationConfiguration: {
                 Role: context.RoleArn,
                 Rules: [{
