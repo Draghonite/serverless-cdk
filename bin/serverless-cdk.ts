@@ -18,6 +18,7 @@ let shortId = Math.random().toString(36);
 if (shortId.includes('0.')) {
     shortId = shortId.split('0.')[1];
 }
+
 const appProps: AppProps = Object.assign({}, {
     context: {
         regionIdMap: regionIdMap,
@@ -28,29 +29,34 @@ const app = new cdk.App(appProps);
 
 const preStack = new ServerlessPreInfrastructureStack(app, 'ServerlessPreInfrastructureStack', {
     env: {
-        region: infrastructureConfig.regions.primary
+        region: infrastructureConfig.regions.primary,
+        // account: process.env.CDK_DEFAULT_ACCOUNT
     }
 });
 
 const primaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion1', {
     env: {
-        region: infrastructureConfig.regions.primary
+        region: infrastructureConfig.regions.primary,
+        // account: process.env.CDK_DEFAULT_ACCOUNT
     }
 });
 
 const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion2', {
     env: {
-        region: infrastructureConfig.regions.secondary
+        region: infrastructureConfig.regions.secondary,
+        // account: process.env.CDK_DEFAULT_ACCOUNT
     }
 });
 
 const postStack = new ServerlessPostInfrastructureStack(app, 'ServerlessPostInfrastructureStack', {
     env: {
-        region: infrastructureConfig.regions.primary
+        region: infrastructureConfig.regions.primary,
+        // account: process.env.CDK_DEFAULT_ACCOUNT
     }
 });
 
 primaryRegionStack.addDependency(preStack);
 secondaryRegionStack.addDependency(preStack);
+postStack.addDependency(preStack);
 postStack.addDependency(primaryRegionStack);
 postStack.addDependency(secondaryRegionStack);

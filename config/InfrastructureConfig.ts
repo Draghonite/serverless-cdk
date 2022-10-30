@@ -2,6 +2,9 @@ export const InfrastructureConfig = {
     vpcName: 'serverless-vpc',
     vpcCIDR: '10.0.0.0/24',
     vpcIdOutput: 'ServerlessVPCId',
+    vpcSubnetGroupNames: [
+        'PrivateSubnetLambda1','PrivateSubnetRDS1','PrivateSubnetRDS'
+    ],
     restApiName: 'Serverless API',
     restApiDescription: 'API that provides an access point for the application',
     apiBucketName: 'serverless-api',
@@ -10,7 +13,9 @@ export const InfrastructureConfig = {
     appBucketNameOutput: 'ServerlessAppBucketName',
     appBucketMultiRegionAccessPointName: 'serverless-app-mrap',
     appLambdaName: 'serverless-app',
+    appLambdaSubnetGroupName: 'PrivateSubnetLambda',
     lambdaCustomHandlerName: 'serverless-app-lambda-provider',
+    lambdaCustomHandlerArnOutput: 'CustomLambdaReplicationHandlerArnOutput',
     s3ReplicationRoleName: 'serverless_app_s3_replication_role',
     isS3ReplicationEnabled: true,
     isS3ReplicationMetricsEnabled: true, // https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-metrics.html

@@ -5,6 +5,9 @@ import { Construct } from 'constructs';
 import { CustomResource, Fn } from 'aws-cdk-lib';
 import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { Provider } from 'aws-cdk-lib/custom-resources';
+import { readFileSync } from 'fs';
+import * as path from 'path';
+import { Vpc } from 'aws-cdk-lib/aws-ec2';
 
 export class ServerlessPostInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -14,11 +17,18 @@ export class ServerlessPostInfrastructureStack extends cdk.Stack {
 
         const shortId: string = scope.node.tryGetContext('shortId');
         
-        const lambdaCustomProvider = new lambda.Function(this, 'CustomLamdaReplicationHandler', {
+        const lambdaCustomProvider = new lambda.Function(this, 'CustomLambdaReplicationHandler', {
             functionName: infrastructureConfig.lambdaCustomHandlerName,
             runtime: lambda.Runtime.NODEJS_16_X,
-            code: lambda.Code.fromAsset('resources/custom-handler'),
+            
+            // NOTE: alternative 1 - automatically zips the folder (from 'code' field) to later extract and executes the {file_name}.{function_name} (from 'handler' field)
+            // code: lambda.Code.fromAsset('resources'),
+            // handler: 'create-s3-replication-handler.handler',
+
+            // NOTE: alternative 2 - uses the raw code (4KB max, from 'code' field) and executes the {file_name}.{function_name} (from 'handler' field)
+            code: lambda.Code.fromInline(readFileSync(path.join(__dirname, '../../resources/create-s3-replication-handler.js')).toString()),
             handler: 'index.handler',
+
             environment: {
                 BUCKET_NAME: `${infrastructureConfig.appBucketName}-${shortId}`,
                 PRIMARY_REGION: infrastructureConfig.regions.primary,
@@ -28,9 +38,11 @@ export class ServerlessPostInfrastructureStack extends cdk.Stack {
             memorySize: 128,
             timeout: cdk.Duration.seconds(30),
             // TODO: secure by placing within the private, internal vpc
-            // vpc: vpc,
+            // vpc: Vpc.fromLookup(this, 'LambdaCustomProviderVpcLookup', {
+            //     vpcName: infrastructureConfig.vpcName
+            // }),
             // vpcSubnets: {
-            //     subnetGroupName: 'PrivateSubnetLambda'
+            //     subnetGroupName: infrastructureConfig.appLambdaSubnetGroupName
             // }
         });
         lambdaCustomProvider.addToRolePolicy(new PolicyStatement({
@@ -56,8 +68,11 @@ export class ServerlessPostInfrastructureStack extends cdk.Stack {
         const customS3AppReplicationProvider = new Provider(this, 'CustomS3AppReplicationProvider', {
             onEventHandler: lambdaCustomProvider
         });
-        new CustomResource(this, 'CustomS3ReplicationResource', {
+        const customS3AppReplicationResource = new CustomResource(this, 'CustomS3ReplicationResource', {
             serviceToken: customS3AppReplicationProvider.serviceToken
         });
+
+        customS3AppReplicationProvider.node.addDependency(lambdaCustomProvider);
+        customS3AppReplicationResource.node.addDependency(customS3AppReplicationProvider);
     }
 }

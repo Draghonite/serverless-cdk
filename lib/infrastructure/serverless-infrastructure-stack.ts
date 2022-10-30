@@ -8,7 +8,7 @@ import { BlockPublicAccess, Bucket, CfnBucket } from 'aws-cdk-lib/aws-s3';
 import * as uuid from 'uuid';
 import { AuroraEngineVersion, AuroraPostgresEngineVersion, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, PostgresEngineVersion, SubnetGroup } from 'aws-cdk-lib/aws-rds';
 import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
-import { CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
+import { CfnOutput } from 'aws-cdk-lib';
 import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal } from 'aws-cdk-lib/aws-iam';
 
 export class ServerlessInfrastructureStack extends cdk.Stack {
@@ -36,15 +36,15 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
     //     maxAzs: 3,
     //     subnetConfiguration: [
     //         {
-    //             name: 'PrivateSubnetLambda1',
+    //             name: infrastructureConfig.vpcSubnetGroupNames[0],
     //             subnetType: SubnetType.PRIVATE_ISOLATED
     //         },
     //         {
-    //             name: 'PrivateSubnetRDS1',
+    //             name: infrastructureConfig.vpcSubnetGroupNames[1],
     //             subnetType: SubnetType.PRIVATE_ISOLATED
     //         },
     //         {
-    //             name: 'PrivateSubnetRDS2',
+    //             name: infrastructureConfig.vpcSubnetGroupNames[2],
     //             subnetType: SubnetType.PRIVATE_ISOLATED
     //         }
     //     ]
@@ -55,9 +55,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
     // });
     
     // TODO: configure security group(s) for the VPC to allow common protocols: 80, 443, 5432
-
-    // const appBucketArn = `arn:aws:s3:::${infrastructureConfig.appBucketName}-${shortId}-${region}`;
-    // const destinationBucketArn = `arn:aws:s3:::${infrastructureConfig.appBucketName}-${shortId}-${destinationBucketRegion}`;
 
     const appBucket = new Bucket(this, 'LambdaAppBucket', {
         // NOTE: to satisfy global-uniqueness constraint but update as needed; should revisit and remove unawanted S3 buckets that would linger
@@ -74,33 +71,9 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
     //     exportName: infrastructureConfig.appBucketNameOutput
     // });
 
-    // NOTE: testing only -- do not configure replication on secondary region to allow primary region to complete setup
-    // if (region === 'us-west-1') {
-        // const cfnAppBucket = appBucket.node.defaultChild as CfnBucket;
-        // (appBucket.node.defaultChild as CfnBucket).replicationConfiguration = {
-        //     role: Role.fromRoleName(this, 'ImportedRoleName', `${infrastructureConfig.s3ReplicationRoleName}-${shortId}`).roleArn,
-        //     rules: [
-        //         {
-        //             id: `s3-replication-rule-${destinationBucketRegion}`,
-        //             priority: 0,
-        //             filter: { prefix: '' },
-        //             status: 'Enabled',
-        //             sourceSelectionCriteria: { replicaModifications: { status: 'Enabled' } },
-        //             prefix: '',
-        //             destination: {
-        //                 bucket: `arn:aws:s3:::${infrastructureConfig.appBucketName}-${destinationBucketRegion}-${shortId}`,
-        //                 replicationTime: { status: 'Enabled', time: { minutes: 15 } },
-        //                 metrics: { status: 'Enabled', eventThreshold: { minutes: 15 } }
-        //             },
-        //             deleteMarkerReplication: { status: 'Enabled' }
-        //         }
-        //     ]
-        // };
-    // }
-
     // TODO: ensure the lambda function has code for testing database connectivity -- use 'pg' node module and query against a standard sys database, or some other query
     // TODO: add a function for basic heart-beat check: access to db should suffice; return 200: OK
-    // const lambdaApp = new lambda.Function(this, 'LamdaAppHandler', {
+    // const lambdaApp = new lambda.Function(this, 'LambdaAppHandler', {
     //     functionName: infrastructureConfig.appLambdaName,
     //     runtime: lambda.Runtime.NODEJS_16_X,
     //     code: lambda.Code.fromAsset('resources'),
@@ -112,7 +85,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
     //     timeout: cdk.Duration.seconds(30),
     //     // vpc: vpc,
     //     // vpcSubnets: {
-    //     //     subnetGroupName: 'PrivateSubnetLambda'
+    //     //     subnetGroupName: infrastructureConfig.appLambdaSubnetGroupName
     //     // }
     // });
 
