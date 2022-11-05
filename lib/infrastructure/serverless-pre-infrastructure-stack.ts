@@ -12,6 +12,7 @@ import { Effect, PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws
 import { Bucket, CfnBucket, CfnMultiRegionAccessPoint } from 'aws-cdk-lib/aws-s3';
 import { HostedZone } from 'aws-cdk-lib/aws-route53';
 import { Certificate, CertificateValidation } from 'aws-cdk-lib/aws-certificatemanager';
+import { Key } from 'aws-cdk-lib/aws-kms';
 
 export class ServerlessPreInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -24,6 +25,10 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
         // const zoneName = infrastructureConfig.dnsZoneName.replace('{uid}', 'abcdef'); // TODO: replace w/ shortId to make unique
         const appBucketArns = [ infrastructureConfig.regions.primary, infrastructureConfig.regions.secondary ]
             .map(region => `arn:aws:s3:::${infrastructureConfig.appBucketName}-${shortId}-${region}`);
+
+        const kmsKey = new Key(this, 'ServerlessAppS3KMS', {
+            alias: infrastructureConfig.kmsAlias
+        });
 
         const s3ReplicationRole = new Role(this, 'S3ReplicationRole', {
             assumedBy: new ServicePrincipal('s3.amazonaws.com'),
@@ -61,6 +66,16 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
                 resources: [
                     ...appBucketArns.map(x => `${x}/*`)
                 ]
+            })
+        );
+        s3ReplicationRole.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    "kms:Encrypt",
+                    "kms:Decrypt"
+                ],
+                resources: [kmsKey.keyArn]
             })
         );
 

@@ -4,12 +4,13 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Construct } from 'constructs';
 import { InstanceClass, InstanceSize, InstanceType, SubnetType, Vpc } from 'aws-cdk-lib/aws-ec2';
-import { BlockPublicAccess, Bucket, CfnBucket } from 'aws-cdk-lib/aws-s3';
+import { BlockPublicAccess, Bucket, BucketEncryption, CfnBucket } from 'aws-cdk-lib/aws-s3';
 import * as uuid from 'uuid';
 import { AuroraEngineVersion, AuroraPostgresEngineVersion, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, PostgresEngineVersion, SubnetGroup } from 'aws-cdk-lib/aws-rds';
 import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
-import { CfnOutput } from 'aws-cdk-lib';
+import { CfnOutput, Fn, RemovalPolicy } from 'aws-cdk-lib';
 import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal } from 'aws-cdk-lib/aws-iam';
+import { Alias } from 'aws-cdk-lib/aws-kms';
 
 export class ServerlessInfrastructureStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -22,7 +23,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
     const shortId: string = scope.node.tryGetContext('shortId');
     // const uniqueId = regionId?.uuid ?? uuid.v4();
     const region = regionId?.region ?? props?.env?.region;
-    const destinationBucketRegion = Array.from(regionIdMap.keys()).filter(x => x !== region)[0];
+    const destinationBucketRegion = Array.from(regionIdMap.keys()).filter(x => x !== region)[0]; // TODO: see if can use infrastructureConfig.regions instead
 
     // TODO: add consistent tags to the resources -- "appname: serverless"
 
@@ -60,8 +61,12 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         // NOTE: to satisfy global-uniqueness constraint but update as needed; should revisit and remove unawanted S3 buckets that would linger
         bucketName: `${infrastructureConfig.appBucketName}-${shortId}-${region}`,
         versioned: true,
-        blockPublicAccess: BlockPublicAccess.BLOCK_ALL
+        blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+        encryption: BucketEncryption.KMS,
+        encryptionKey: Alias.fromAliasName(this, 'ServerlessAppS3KMSLookup', infrastructureConfig.kmsAlias),
+        bucketKeyEnabled: true
     });
+    // TODO: configure bucket policies to ensure only the app execution role and the application's lambda function can access the bucket
     // new CfnOutput(this, 'ServerlessLambdaAppBucketArnOutput', {
     //     value: appBucket.bucketArn,
     //     exportName: infrastructureConfig.appBucketArnOutput
@@ -70,6 +75,33 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
     //     value: appBucket.bucketName,
     //     exportName: infrastructureConfig.appBucketNameOutput
     // });
+
+    // NOTE: testing -- only configure replication in secondary bucket once primary bucket is configured
+    if (region === infrastructureConfig.regions.secondary) {
+        const cfnAppBucket = appBucket.node.defaultChild as CfnBucket;
+        (appBucket.node.defaultChild as CfnBucket).replicationConfiguration = {
+            // roleArn: Fn.sub("arn:aws:iam::${AWS::AccountId}:role/service-role/"+`${infrastructureConfig.s3ReplicationRoleName}-${shortId}`)
+            // role: Role.fromRoleName(this, 'ImportedRoleName', `/service-role/${infrastructureConfig.s3ReplicationRoleName}-${shortId}`).roleArn,
+            role: Fn.sub("arn:aws:iam::${AWS::AccountId}:role/service-role/"+`${infrastructureConfig.s3ReplicationRoleName}-${shortId}`),
+            rules: [
+                {
+                    id: `s3-replication-rule-${region}-to-${destinationBucketRegion}`,
+                    priority: 0,
+                    filter: { prefix: '' },
+                    status: 'Enabled',
+                    sourceSelectionCriteria: { replicaModifications: { status: 'Enabled' } },
+                    prefix: '',
+                    destination: {
+                        bucket: `arn:aws:s3:::${infrastructureConfig.appBucketName}-${shortId}-${destinationBucketRegion}`,
+                        replicationTime: { status: 'Enabled', time: { minutes: 15 } },
+                        metrics: { status: 'Enabled', eventThreshold: { minutes: 15 } }
+                    },
+                    deleteMarkerReplication: { status: 'Enabled' },
+                    // TODO: add kms encryption settings
+                }
+            ]
+        };
+    }
 
     // TODO: ensure the lambda function has code for testing database connectivity -- use 'pg' node module and query against a standard sys database, or some other query
     // TODO: add a function for basic heart-beat check: access to db should suffice; return 200: OK

@@ -33,7 +33,9 @@ export class ServerlessPostInfrastructureStack extends cdk.Stack {
                 BUCKET_NAME: `${infrastructureConfig.appBucketName}-${shortId}`,
                 PRIMARY_REGION: infrastructureConfig.regions.primary,
                 REPLICATION_ROLE_ARN: Fn.sub("arn:aws:iam::${AWS::AccountId}:role/service-role/"+`${infrastructureConfig.s3ReplicationRoleName}-${shortId}`),
-                SECONDARY_REGION: infrastructureConfig.regions.secondary
+                SECONDARY_REGION: infrastructureConfig.regions.secondary,
+                ACCOUNT: process.env.CDK_DEFAULT_ACCOUNT || '',
+                KMS_KEY_ALIAS: InfrastructureConfig.kmsAlias
             },
             memorySize: 128,
             timeout: cdk.Duration.seconds(30),
@@ -65,14 +67,16 @@ export class ServerlessPostInfrastructureStack extends cdk.Stack {
             ]
         }));
 
-        const customS3AppReplicationProvider = new Provider(this, 'CustomS3AppReplicationProvider', {
-            onEventHandler: lambdaCustomProvider
-        });
+        // const customS3AppReplicationProvider = new Provider(this, 'CustomS3AppReplicationProvider', {
+        //     onEventHandler: lambdaCustomProvider
+        // });
         const customS3AppReplicationResource = new CustomResource(this, 'CustomS3ReplicationResource', {
-            serviceToken: customS3AppReplicationProvider.serviceToken
+            // serviceToken: customS3AppReplicationProvider.serviceToken
+            serviceToken: lambdaCustomProvider.functionArn
         });
 
-        customS3AppReplicationProvider.node.addDependency(lambdaCustomProvider);
-        customS3AppReplicationResource.node.addDependency(customS3AppReplicationProvider);
+        // customS3AppReplicationProvider.node.addDependency(lambdaCustomProvider);
+        // customS3AppReplicationResource.node.addDependency(customS3AppReplicationProvider);
+        customS3AppReplicationResource.node.addDependency(lambdaCustomProvider);
     }
 }

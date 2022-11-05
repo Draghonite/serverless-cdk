@@ -5,6 +5,7 @@ export const InfrastructureConfig = {
     vpcSubnetGroupNames: [
         'PrivateSubnetLambda1','PrivateSubnetRDS1','PrivateSubnetRDS'
     ],
+    kmsAlias: 'alias/serverlessappkey',
     restApiName: 'Serverless API',
     restApiDescription: 'API that provides an access point for the application',
     apiBucketName: 'serverless-api',

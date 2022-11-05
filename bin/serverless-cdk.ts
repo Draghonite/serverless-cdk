@@ -18,6 +18,7 @@ let shortId = Math.random().toString(36);
 if (shortId.includes('0.')) {
     shortId = shortId.split('0.')[1];
 }
+// shortId = 'staticid'; // TODO: remove for official use
 
 const appProps: AppProps = Object.assign({}, {
     context: {
@@ -41,6 +42,8 @@ const primaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInf
     }
 });
 
+// s3 region1
+
 const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion2', {
     env: {
         region: infrastructureConfig.regions.secondary,
@@ -48,15 +51,21 @@ const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessI
     }
 });
 
-const postStack = new ServerlessPostInfrastructureStack(app, 'ServerlessPostInfrastructureStack', {
-    env: {
-        region: infrastructureConfig.regions.primary,
-        // account: process.env.CDK_DEFAULT_ACCOUNT
-    }
-});
+// s3 region2
+
+// s3 region1->region2 crr
+
+// s3 region2->region1 crr
+
+// const postStack = new ServerlessPostInfrastructureStack(app, 'ServerlessPostInfrastructureStack', {
+//     env: {
+//         region: infrastructureConfig.regions.primary,
+//         // account: process.env.CDK_DEFAULT_ACCOUNT
+//     }
+// });
 
 primaryRegionStack.addDependency(preStack);
 secondaryRegionStack.addDependency(preStack);
-postStack.addDependency(preStack);
-postStack.addDependency(primaryRegionStack);
-postStack.addDependency(secondaryRegionStack);
+// postStack.addDependency(preStack);
+// postStack.addDependency(primaryRegionStack);
+// postStack.addDependency(secondaryRegionStack);
