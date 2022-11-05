@@ -1,36 +1,43 @@
-exports.handler = async (event) => {
+exports.handler = (event, context) => {
     console.log('[handler called]');
     console.log(event);
 
+    var response = require('cfn-response');
     const AWS = require('aws-sdk');
-    const uuidv4 = () => "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,function(x){var n=16*Math.random()|0;return("x"==x?n:3&n|8).toString(16)});
                     
-    const tryCreateS3Replication = (context) => {
-        const s3 = new AWS.S3({ region: context.primaryRegion });
-        return new Promise((resolve, reject) => {
-            s3.getBucketReplication({ Bucket: context.SourceBucketName }, (error1) => {
-                if (!error1 || error1.code !== 'ReplicationConfigurationNotFoundError') { reject(); } else {
+    const tryCreateS3Replication = (options) => {
+        const s3 = new AWS.S3({ region: options.primaryRegion });
+        return new Promise((resolve) => {
+            s3.getBucketReplication({ Bucket: options.SourceBucketName }, (error, result) => {
+                const isRuleExists = result?.Rules?.filter(r => r.ID === 's3-replication-rule-'+options.SourceRegion+'-to-'+options.DestinationRegion).length > 0;
+                console.log('[tryCreateS3Replication]', 'error: ', error, 'result: ', JSON.stringify(result));
+                
+                // TODO: something about this?!
+                // if (!isRuleExists && (!error || error.code === 'ReplicationConfigurationNotFoundError')) {
                     s3.putBucketReplication({
-                        Bucket: context.SourceBucketName,
-                        // TODO: enure to include replication of kms-encrypted objects by setting the appropriate options -- https://sbstjn.com/blog/aws-cdk-s3-cross-region-replication-kms/
+                        Bucket: options.SourceBucketName,
                         ReplicationConfiguration: {
-                            Role: context.RoleArn,
+                            Role: options.RoleArn,
                             Rules: [{
-                                ID: 's3-replication-rule-'+context.SourceRegion+'-to-'+context.DestinationRegion,
+                                ID: 's3-replication-rule-'+options.SourceRegion+'-to-'+options.DestinationRegion,
                                 Priority: 0,
                                 Filter: { Prefix: '' },
                                 Status: 'Enabled',
-                                SourceSelectionCriteria: { ReplicaModifications: { Status: 'Enabled' } },
+                                SourceSelectionCriteria: { 
+                                    ReplicaModifications: { Status: 'Enabled' },
+                                    SseKmsEncryptedObjects: { Status: 'Enabled' }
+                                },
                                 Destination: {
-                                    Bucket: context.DestinationBucketArn,
+                                    Bucket: options.DestinationBucketArn,
                                     ReplicationTime: { Status: 'Enabled', Time: { Minutes: 15 } },
-                                    Metrics: { Status: 'Enabled', EventThreshold: { Minutes: 15 } }
+                                    Metrics: { Status: 'Enabled', EventThreshold: { Minutes: 15 } },
+                                    EncryptionConfiguration: { ReplicaKmsKeyID: options.DestinationKmsKeyArn }
                                 },
                                 DeleteMarkerReplication: { Status: 'Enabled' }
                             }]
                         }
                     }, () => resolve());
-                }
+                // } else { resolve(); }
             });
         });
     }
@@ -38,28 +45,39 @@ exports.handler = async (event) => {
     switch (event.RequestType) {
         case 'Update':
         case 'Create':
-            await tryCreateS3Replication({
-                RoleArn: process.env.REPLICATION_ROLE_ARN,
-                SourceRegion: process.env.SECONDARY_REGION,
-                SourceBucketName: process.env.BUCKET_NAME+'-'+process.env.SECONDARY_REGION,
-                SourceBucketArn: 'arn:aws:s3:::'+process.env.BUCKET_NAME+'-'+process.env.SECONDARY_REGION,
-                DestinationRegion: process.env.PRIMARY_REGION,
-                DestinationBucketName: process.env.BUCKET_NAME+'-'+process.env.PRIMARY_REGION,
-                DestinationBucketArn: 'arn:aws:s3:::'+process.env.BUCKET_NAME+'-'+process.env.PRIMARY_REGION
+            const accountId = process.env.ACCOUNT || context.invokedFunctionArn.split(':')[4];
+            Promise.all([
+                tryCreateS3Replication({
+                    RoleArn: process.env.REPLICATION_ROLE_ARN,
+                    SourceRegion: process.env.SECONDARY_REGION,
+                    SourceBucketName: process.env.BUCKET_NAME+'-'+process.env.SECONDARY_REGION,
+                    SourceBucketArn: 'arn:aws:s3:::'+process.env.BUCKET_NAME+'-'+process.env.SECONDARY_REGION,
+                    SourceKmsKeyArn: 'arn:aws:kms:'+process.env.SECONDARY_REGION+':'+accountId+':'+process.env.KMS_KEY_ALIAS,
+                    DestinationRegion: process.env.PRIMARY_REGION,
+                    DestinationBucketName: process.env.BUCKET_NAME+'-'+process.env.PRIMARY_REGION,
+                    DestinationBucketArn: 'arn:aws:s3:::'+process.env.BUCKET_NAME+'-'+process.env.PRIMARY_REGION,
+                    DestinationKmsKeyArn: 'arn:aws:kms:'+process.env.PRIMARY_REGION+':'+accountId+':'+process.env.KMS_KEY_ALIAS
+                }),
+                tryCreateS3Replication({
+                    RoleArn: process.env.REPLICATION_ROLE_ARN,
+                    SourceRegion: process.env.PRIMARY_REGION,
+                    SourceBucketName: process.env.BUCKET_NAME+'-'+process.env.PRIMARY_REGION,
+                    SourceBucketArn: 'arn:aws:s3:::'+process.env.BUCKET_NAME+'-'+process.env.PRIMARY_REGION,
+                    SourceKmsKeyArn: 'arn:aws:kms:'+process.env.PRIMARY_REGION+':'+accountId+':'+process.env.KMS_KEY_ALIAS,
+                    DestinationRegion: process.env.SECONDARY_REGION,
+                    DestinationBucketName: process.env.BUCKET_NAME+'-'+process.env.SECONDARY_REGION,
+                    DestinationBucketArn: 'arn:aws:s3:::'+process.env.BUCKET_NAME+'-'+process.env.SECONDARY_REGION,
+                    DestinationKmsKeyArn: 'arn:aws:kms:'+process.env.SECONDARY_REGION+':'+accountId+':'+process.env.KMS_KEY_ALIAS
+                })
+            ]).then(() => {
+                response.send(event, context, response.SUCCESS);
             });
-            await tryCreateS3Replication({
-                RoleArn: process.env.REPLICATION_ROLE_ARN,
-                SourceRegion: process.env.PRIMARY_REGION,
-                SourceBucketName: process.env.BUCKET_NAME+'-'+process.env.PRIMARY_REGION,
-                SourceBucketArn: 'arn:aws:s3:::'+process.env.BUCKET_NAME+'-'+process.env.PRIMARY_REGION,
-                DestinationRegion: process.env.SECONDARY_REGION,
-                DestinationBucketName: process.env.BUCKET_NAME+'-'+process.env.SECONDARY_REGION,
-                DestinationBucketArn: 'arn:aws:s3:::'+process.env.BUCKET_NAME+'-'+process.env.SECONDARY_REGION
-            });
-            return { PhysicalResourceId: uuidv4() };
+            break;
         case 'Delete':
-            return;
+            response.send(event, context, response.SUCCESS);
+            break;
         default:
-            throw new Error('Unknown request type');
+            response.send(event, context, response.FAILED, { message: 'Unknown request type.' });
+            break;
     }
 };
