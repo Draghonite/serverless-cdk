@@ -1,31 +1,12 @@
 import { InfrastructureConfig } from './../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Construct } from 'constructs';
-import { InstanceClass, InstanceSize, InstanceType, SubnetType, Vpc } from 'aws-cdk-lib/aws-ec2';
 import { BlockPublicAccess, Bucket, BucketEncryption, CfnBucket } from 'aws-cdk-lib/aws-s3';
-import * as uuid from 'uuid';
-import { AuroraEngineVersion, AuroraPostgresEngineVersion, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, PostgresEngineVersion, SubnetGroup } from 'aws-cdk-lib/aws-rds';
-import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
-import { CfnOutput, Fn, RemovalPolicy, CfnParameter } from 'aws-cdk-lib';
-import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal } from 'aws-cdk-lib/aws-iam';
+import { Fn, RemovalPolicy } from 'aws-cdk-lib';
 import { Alias } from 'aws-cdk-lib/aws-kms';
-    
-export interface CustomStackProps extends cdk.StackProps {
-    shouldConfigureReplication: boolean;
-}
 
 export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
-
-    // ContentBucket: Bucket;
-
-    // protected allocateLogicalId(cfnElement: cdk.CfnElement): string {
-    //     // return "ServerlessAppContentBucketResource"+Math.floor(Math.random() * 100);
-    //     return cfnElement.node.id;
-    // }
-
-    constructor(scope: Construct, id: string, props?: CustomStackProps) {
+    constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
         const infrastructureConfig = InfrastructureConfig;

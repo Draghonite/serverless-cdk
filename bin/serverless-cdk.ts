@@ -28,7 +28,7 @@ const appProps: AppProps = Object.assign({}, {
              - change to true and 'cdk deploy --all' again to add cross-region, bi-directional replication on the buckets
             NOTE: running in this sequence -- false->true->false -- would remove replication configuration
         */
-        shouldConfigureReplication: false 
+        shouldConfigureReplication: true 
     }
 });
 const app = new cdk.App(appProps);
@@ -48,8 +48,7 @@ const primaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInf
 // content s3 region1
 const primaryRegionContentBucketStack = new ServerlessInfrastructureContentBucketStack(app, 'ServerlessInfrastructureContentBucketStack1', {
     env: { region: infrastructureConfig.regions.primary /*, account: process.env.CDK_DEFAULT_ACCOUNT*/ },
-    stackName: 'ServerlessInfrastructureContentBucketStack',
-    shouldConfigureReplication: false
+    stackName: 'ServerlessInfrastructureContentBucketStack'
 });
 
 const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion2', {
@@ -60,8 +59,7 @@ const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessI
 // content s3 region2
 const secondaryRegionContentBucketStack = new ServerlessInfrastructureContentBucketStack(app, 'ServerlessInfrastructureContentBucketStack2', {
     env: { region: infrastructureConfig.regions.secondary /*, account: process.env.CDK_DEFAULT_ACCOUNT*/ },
-    stackName: 'ServerlessInfrastructureContentBucketStack',
-    shouldConfigureReplication: true
+    stackName: 'ServerlessInfrastructureContentBucketStack'
 });
 
 // const postStack = new ServerlessPostInfrastructureStack(app, 'ServerlessPostInfrastructureStack', {
