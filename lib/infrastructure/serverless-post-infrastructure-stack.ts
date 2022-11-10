@@ -15,7 +15,7 @@ export class ServerlessPostInfrastructureStack extends cdk.Stack {
 
         const infrastructureConfig = InfrastructureConfig;
 
-        const shortId: string = scope.node.tryGetContext('shortId');
+        const appId: string = scope.node.tryGetContext('appId');
         
         const lambdaCustomProvider = new lambda.Function(this, 'CustomLambdaReplicationHandler', {
             functionName: infrastructureConfig.lambdaCustomHandlerName,
@@ -30,9 +30,9 @@ export class ServerlessPostInfrastructureStack extends cdk.Stack {
             handler: 'index.handler',
 
             environment: {
-                BUCKET_NAME: `${infrastructureConfig.appBucketName}-${shortId}`,
+                BUCKET_NAME: `${infrastructureConfig.appBucketName}-${appId}`,
                 PRIMARY_REGION: infrastructureConfig.regions.primary,
-                REPLICATION_ROLE_ARN: Fn.sub("arn:aws:iam::${AWS::AccountId}:role/service-role/"+`${infrastructureConfig.s3ReplicationRoleName}-${shortId}`),
+                REPLICATION_ROLE_ARN: Fn.sub("arn:aws:iam::${AWS::AccountId}:role/service-role/"+`${infrastructureConfig.s3ReplicationRoleName}-${appId}`),
                 SECONDARY_REGION: infrastructureConfig.regions.secondary,
                 ACCOUNT: process.env.CDK_DEFAULT_ACCOUNT || '',
                 KMS_KEY_ALIAS: InfrastructureConfig.kmsAlias
@@ -63,7 +63,7 @@ export class ServerlessPostInfrastructureStack extends cdk.Stack {
                 "iam:PassRole"
             ],
             resources: [
-                Fn.sub("arn:aws:iam::${AWS::AccountId}:role/service-role/"+`${infrastructureConfig.s3ReplicationRoleName}-${shortId}`)
+                Fn.sub("arn:aws:iam::${AWS::AccountId}:role/service-role/"+`${infrastructureConfig.s3ReplicationRoleName}-${appId}`)
             ]
         }));
 
