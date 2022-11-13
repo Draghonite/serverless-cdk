@@ -11,54 +11,44 @@ import { ServerlessInfrastructureContentBucketStack } from './../lib/infrastruct
 
 const infrastructureConfig = InfrastructureConfig;
 
-/*
-    NOTE: provides a unique identifier for the application
+// appId guard to ensure a unique identifier for the application is specified, see README
+if (!process.env.APP_ID && !infrastructureConfig.appId) {
+    throw new Error("The 'appId' is not configured; either set the 'APP_ID' argument via CLI or the 'appId' InfrastructureConfig property.");
+}
 
-    Set to empty-string to use a random, ~11-character identifier
-*/
-const appId = 'appid'; 
-
-// overrides the default context to pass additional parameters shared across all stacks in this application w/o dependency on CF Output Parameters
+// extends the default context to pass additional parameters shared across all stacks in this application
 const appProps: AppProps = Object.assign({}, {
     context: {
-        appId: appId || Math.random().toString(36).replace('0.', ''),
-        /*
-            TODO: very important to configure the following setting accordingly!
-             - 'cdk deploy --all' initially set to false to create the buckets across the regions
-             - change to true and 'cdk deploy --all' again to add cross-region, bi-directional replication on the buckets
-            NOTE: running in this sequence -- false->true->false -- would remove replication configuration
-        */
-        shouldConfigureReplication: true 
+        appId: process.env.APP_ID || infrastructureConfig.appId,
+        shouldConfigureReplication: /yes|true/i.test(process.env.INCLUDE_REPLICATION || '')
     }
 });
 const app = new cdk.App(appProps);
 
-console.log(`*** [shouldConfigureReplication]: ${appProps?.context?.shouldConfigureReplication}`);
-
 const preStack = new ServerlessPreInfrastructureStack(app, 'ServerlessPreInfrastructureStack', {
-    env: { region: infrastructureConfig.regions.primary /*, account: process.env.CDK_DEFAULT_ACCOUNT*/ },
+    env: { region: infrastructureConfig.regions.primary },
     stackName: 'ServerlessPreInfrastructureStack'
 });
 
 const primaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion1', {
-    env: { region: infrastructureConfig.regions.primary /*, account: process.env.CDK_DEFAULT_ACCOUNT*/ },
+    env: { region: infrastructureConfig.regions.primary },
     stackName: 'ServerlessInfrastructureStack'
 });
 
 // content s3 region1
 const primaryRegionContentBucketStack = new ServerlessInfrastructureContentBucketStack(app, 'ServerlessInfrastructureContentBucketStack1', {
-    env: { region: infrastructureConfig.regions.primary /*, account: process.env.CDK_DEFAULT_ACCOUNT*/ },
+    env: { region: infrastructureConfig.regions.primary },
     stackName: 'ServerlessInfrastructureContentBucketStack'
 });
 
 const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion2', {
-    env: { region: infrastructureConfig.regions.secondary /*, account: process.env.CDK_DEFAULT_ACCOUNT*/ },
+    env: { region: infrastructureConfig.regions.secondary },
     stackName: 'ServerlessInfrastructureStack'
 });
 
 // content s3 region2
 const secondaryRegionContentBucketStack = new ServerlessInfrastructureContentBucketStack(app, 'ServerlessInfrastructureContentBucketStack2', {
-    env: { region: infrastructureConfig.regions.secondary /*, account: process.env.CDK_DEFAULT_ACCOUNT*/ },
+    env: { region: infrastructureConfig.regions.secondary },
     stackName: 'ServerlessInfrastructureContentBucketStack'
 });
 
@@ -71,9 +61,9 @@ const secondaryRegionContentBucketStack = new ServerlessInfrastructureContentBuc
 
 primaryRegionStack.addDependency(preStack);
 secondaryRegionStack.addDependency(preStack);
-// postStack.addDependency(preStack);
-// postStack.addDependency(primaryRegionStack);
-// postStack.addDependency(secondaryRegionStack);
 primaryRegionContentBucketStack.addDependency(primaryRegionStack);
 secondaryRegionStack.addDependency(primaryRegionContentBucketStack);
 secondaryRegionContentBucketStack.addDependency(secondaryRegionStack);
+// postStack.addDependency(preStack);
+// postStack.addDependency(primaryRegionStack);
+// postStack.addDependency(secondaryRegionStack);

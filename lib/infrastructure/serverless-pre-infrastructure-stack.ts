@@ -80,33 +80,18 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
                     "s3:ListBucket",
                     "s3:GetReplicationConfiguration",
                     "s3:GetObjectVersionForReplication",
-                    "s3:GetObjectVersionAcl"
-                ],
-                resources: [
-                    `${sourceBucketARN}`,
-                    `${sourceBucketARN}/*`
-                ]
-            })
-        );
-        replicationRole.addToPolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: [
+                    "s3:GetObjectVersionAcl",
+                    "s3:GetObjectLegalHold",
+                    "s3:GetObjectRetention",
                     "s3:ReplicateObject",
                     "s3:ReplicateDelete",
                     "s3:ReplicateTags",
                     "s3:GetObjectVersionTagging"
                 ],
-                // TODO: remove conditions and make policies less-restrictive
-                conditions: {
-                    'StringLikeIfExists': {
-                        's3:x-amz-server-side-encryption': [ 'aws:kms', 'AES256' ],
-                        's3:x-amz-server-side-encryption-aws-kms-key-id': [
-                            `${destinationKeyARN}`
-                        ]
-                    }
-                },
                 resources: [
+                    `${sourceBucketARN}`,
+                    `${sourceBucketARN}/*`,
+                    `${destinationBucketARN}`,
                     `${destinationBucketARN}/*`
                 ]
             })
@@ -115,39 +100,13 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
             new PolicyStatement({
                 effect: Effect.ALLOW,
                 actions: [
-                    "kms:Decrypt"
+                    "kms:Encrypt",
+                    "kms:Decrypt",
+                    "kms:ReEncrypt*",
+                    "kms:GenerateDataKey"
                 ],
-                // TODO: remove conditions and make policies less-restrictive
-                conditions: {
-                    'StringLike': {
-                        'kms:ViaService': `s3.${destinationRegion}.amazonaws.com`,
-                        'kms:EncryptionContext:aws:s3:arn': [
-                            `${sourceBucketARN}/*`
-                        ]
-                    }
-                },
                 resources: [
-                    `${sourceKeyARN}`
-                ]
-            })
-        );
-        replicationRole.addToPolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: [
-                    "kms:Encrypt"
-                ],
-                // TODO: remove conditions and make policies less-restrictive
-                conditions: {
-                    'StringLike': {
-                        'kms:ViaService': `s3.${sourceRegion}.amazonaws.com`,
-                        'kms:EncryptionContext:aws:s3:arn': [
-                            `${destinationBucketARN}/*`
-                        ]
-                    }
-                },
-                resources: [
-                    `${destinationKeyARN}`
+                    'arn:aws:kms:*:*:*'
                 ]
             })
         );

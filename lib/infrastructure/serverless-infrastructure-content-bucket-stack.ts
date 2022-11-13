@@ -2,7 +2,7 @@ import { InfrastructureConfig } from './../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { BlockPublicAccess, Bucket, BucketEncryption, CfnBucket } from 'aws-cdk-lib/aws-s3';
-import { Fn, RemovalPolicy } from 'aws-cdk-lib';
+import { Fn } from 'aws-cdk-lib';
 import { Alias } from 'aws-cdk-lib/aws-kms';
 
 export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
@@ -21,28 +21,26 @@ export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
             blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
             encryption: BucketEncryption.KMS,
             encryptionKey: Alias.fromAliasName(this, 'ServerlessAppS3KMSLookup', infrastructureConfig.kmsAlias),
-            bucketKeyEnabled: true,
-            // removalPolicy: RemovalPolicy.DESTROY // NOTE: for dev only, remove or use 'RETAIN' for actual use
+            bucketKeyEnabled: true
         });
 
         if (scope.node.tryGetContext('shouldConfigureReplication')) {
             (contentBucket.node.defaultChild as CfnBucket).replicationConfiguration = {
-                role: Fn.sub("arn:aws:iam::${AWS::AccountId}:role/service-role/"+`${infrastructureConfig.s3ReplicationRoleName}-${appId}`),
+                role: Fn.sub('arn:aws:iam::${AWS::AccountId}:role/service-role/'+`${infrastructureConfig.s3ReplicationRoleName}-${appId}`),
                 rules: [
                     {
                         id: `s3-replication-rule-${region}-to-${destinationBucketRegion}`,
-                        // priority: 0,
-                        // filter: { prefix: '' },
                         status: 'Enabled',
-                        // sourceSelectionCriteria: { replicaModifications: { status: 'Enabled' } },
                         prefix: '',
                         destination: {
                             bucket: `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${destinationBucketRegion}`,
-                            // replicationTime: { status: 'Enabled', time: { minutes: 15 } },
-                            // metrics: { status: 'Enabled', eventThreshold: { minutes: 15 } }
+                            encryptionConfiguration: {
+                                replicaKmsKeyId: Fn.sub(`arn:aws:kms:${destinationBucketRegion}`+':${AWS::AccountId}:'+`${infrastructureConfig.kmsAlias}`)
+                            }
                         },
-                        // deleteMarkerReplication: { status: 'Enabled' },
-                        // TODO: add kms encryption settings
+                        sourceSelectionCriteria: {
+                            sseKmsEncryptedObjects: { status: 'Enabled' }
+                        }
                     }
                 ]
             };

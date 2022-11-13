@@ -1,4 +1,5 @@
 export const InfrastructureConfig = {
+    appId: '',
     vpcName: 'serverless-vpc',
     vpcCIDR: '10.0.0.0/24',
     vpcIdOutput: 'ServerlessVPCId',
