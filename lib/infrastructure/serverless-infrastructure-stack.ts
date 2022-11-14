@@ -18,7 +18,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         const infrastructureConfig = InfrastructureConfig;
         
         const appId: string = scope.node.tryGetContext('appId');
-        const region = props?.env?.region;
+        // const region = props?.env?.region;
 
         const kmsKey = new Key(this, 'ServerlessAppS3KMS', {
             alias: infrastructureConfig.kmsAlias
@@ -48,10 +48,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         //             subnetType: SubnetType.PRIVATE_ISOLATED
         //         }
         //     ]
-        // });
-        // new CfnOutput(this, 'ServerlessVPCIdOutput', {
-        //     value: vpc.vpcId,
-        //     exportName: infrastructureConfig.vpcIdOutput
         // });
         
         // TODO: configure security group(s) for the VPC to allow common protocols: 80, 443, 5432

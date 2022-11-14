@@ -21,8 +21,8 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
         const infrastructureConfig = InfrastructureConfig;
 
         const appId: string = scope.node.tryGetContext('appId');
-        // const region = regionId?.region ?? props?.env?.region;
-        const zoneName = infrastructureConfig.dnsZoneName.replace('{appId}', appId);
+        // const region = props?.env?.region;
+        // const zoneName = infrastructureConfig.dnsZoneName.replace('{appId}', appId);
 
         const s3ReplicationRole = new Role(this, 'S3ReplicationRole', {
             assumedBy: new ServicePrincipal('s3.amazonaws.com'),
@@ -69,10 +69,6 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
 
         // const dnsZone = new HostedZone(this, 'ServerlessHostedZone', {
         //     zoneName: zoneName,
-        // });
-        // const dsnZoneOutput = new CfnOutput(this, 'ServerlessHostedZoneOutput', {
-        //     exportName: infrastructureConfig.dnsZoneOutput,
-        //     value: zoneName
         // });
 
         // const sslCert = new Certificate(this, 'ServerlessCertificate', {
