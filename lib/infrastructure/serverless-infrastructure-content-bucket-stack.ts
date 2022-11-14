@@ -1,3 +1,4 @@
+import { PolicyStatement, Effect, ArnPrincipal } from 'aws-cdk-lib/aws-iam';
 import { InfrastructureConfig } from './../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
@@ -23,6 +24,26 @@ export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
             encryptionKey: Alias.fromAliasName(this, 'ServerlessAppS3KMSLookup', infrastructureConfig.kmsAlias),
             bucketKeyEnabled: true
         });
+        contentBucket.addToResourcePolicy(new PolicyStatement({
+            effect: Effect.ALLOW,
+            principals: [
+                new ArnPrincipal(Fn.sub(`arn:aws:iam::\${AWS::AccountId}:role/service-role/${infrastructureConfig.s3ReplicationRoleName}-${appId}`))
+            ],
+            actions: [
+                "s3:ObjectOwnerOverrideToBucketOwner",
+                "s3:GetObjectVersionForReplication",
+                "s3:GetObjectVersionAcl",
+                "s3:GetObjectLegalHold",
+                "s3:GetObjectRetention",
+                "s3:ReplicateObject",
+                "s3:ReplicateDelete",
+                "s3:ReplicateTags",
+                "s3:GetObjectVersionTagging"
+            ],
+            resources: [
+                `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${region}/*`
+            ]
+        }));
 
         if (scope.node.tryGetContext('shouldConfigureReplication')) {
             (contentBucket.node.defaultChild as CfnBucket).replicationConfiguration = {
@@ -35,7 +56,7 @@ export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
                         destination: {
                             bucket: `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${destinationBucketRegion}`,
                             encryptionConfiguration: {
-                                replicaKmsKeyId: Fn.sub(`arn:aws:kms:${destinationBucketRegion}`+':${AWS::AccountId}:'+`${infrastructureConfig.kmsAlias}`)
+                                replicaKmsKeyId: Fn.sub(`arn:aws:kms:${destinationBucketRegion}:\${AWS::AccountId}:${infrastructureConfig.kmsAlias}`)
                             }
                         },
                         sourceSelectionCriteria: {

@@ -21,36 +21,50 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
         const infrastructureConfig = InfrastructureConfig;
 
         const appId: string = scope.node.tryGetContext('appId');
-        const account = process.env.ACCOUNT || process.env.CDK_DEFAULT_ACCOUNT;
         // const region = regionId?.region ?? props?.env?.region;
-        // const zoneName = infrastructureConfig.dnsZoneName.replace('{uid}', 'abcdef'); // TODO: replace w/ appId to make unique
-        const appBucketArns = [ infrastructureConfig.regions.primary, infrastructureConfig.regions.secondary ]
-            .map(region => `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${region}`);
+        const zoneName = infrastructureConfig.dnsZoneName.replace('{appId}', appId);
 
         const s3ReplicationRole = new Role(this, 'S3ReplicationRole', {
             assumedBy: new ServicePrincipal('s3.amazonaws.com'),
             path: '/service-role/',
-            roleName: `${infrastructureConfig.s3ReplicationRoleName}-${appId}`,
+            roleName: `${infrastructureConfig.s3ReplicationRoleName}-${appId}`
         });
-        /* Primary Region Bucket Policies */
-        this.addReplicationRolePolicies(
-            s3ReplicationRole,
-            infrastructureConfig.regions.primary,
-            `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.primary}`,
-            `arn:aws:kms:${infrastructureConfig.regions.primary}:${account}:${infrastructureConfig.kmsAlias}`,
-            infrastructureConfig.regions.secondary,
-            `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.secondary}`,
-            `arn:aws:kms:${infrastructureConfig.regions.secondary}:${account}:${infrastructureConfig.kmsAlias}`
+        s3ReplicationRole.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    "s3:ListBucket",
+                    "s3:GetReplicationConfiguration",
+                    "s3:GetObjectVersionForReplication",
+                    "s3:GetObjectVersionAcl",
+                    "s3:GetObjectLegalHold",
+                    "s3:GetObjectRetention",
+                    "s3:ReplicateObject",
+                    "s3:ReplicateDelete",
+                    "s3:ReplicateTags",
+                    "s3:GetObjectVersionTagging"
+                ],
+                resources: [
+                    `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.primary}`,
+                    `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.primary}/*`,
+                    `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.secondary}`,
+                    `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.secondary}/*`,
+                ]
+            })
         );
-        /* Secondary Region Bucket Policies */
-        this.addReplicationRolePolicies(
-            s3ReplicationRole,
-            infrastructureConfig.regions.secondary,
-            `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.secondary}`,
-            `arn:aws:kms:${infrastructureConfig.regions.secondary}:${account}:${infrastructureConfig.kmsAlias}`,
-            infrastructureConfig.regions.primary,
-            `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.primary}`,
-            `arn:aws:kms:${infrastructureConfig.regions.primary}:${account}:${infrastructureConfig.kmsAlias}`
+        s3ReplicationRole.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    "kms:Encrypt",
+                    "kms:Decrypt",
+                    "kms:ReEncrypt*",
+                    "kms:GenerateDataKey"
+                ],
+                resources: [
+                    'arn:aws:kms:*:*:*'
+                ]
+            })
         );
 
         // const dnsZone = new HostedZone(this, 'ServerlessHostedZone', {
@@ -70,45 +84,5 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
         //         `web.${zoneName}`
         //     ]
         // });
-    }
-
-    private addReplicationRolePolicies(replicationRole: Role, sourceRegion: string, sourceBucketARN: string, sourceKeyARN: string, destinationRegion: string, destinationBucketARN: string, destinationKeyARN: string) {
-        replicationRole.addToPolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: [
-                    "s3:ListBucket",
-                    "s3:GetReplicationConfiguration",
-                    "s3:GetObjectVersionForReplication",
-                    "s3:GetObjectVersionAcl",
-                    "s3:GetObjectLegalHold",
-                    "s3:GetObjectRetention",
-                    "s3:ReplicateObject",
-                    "s3:ReplicateDelete",
-                    "s3:ReplicateTags",
-                    "s3:GetObjectVersionTagging"
-                ],
-                resources: [
-                    `${sourceBucketARN}`,
-                    `${sourceBucketARN}/*`,
-                    `${destinationBucketARN}`,
-                    `${destinationBucketARN}/*`
-                ]
-            })
-        );
-        replicationRole.addToPolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: [
-                    "kms:Encrypt",
-                    "kms:Decrypt",
-                    "kms:ReEncrypt*",
-                    "kms:GenerateDataKey"
-                ],
-                resources: [
-                    'arn:aws:kms:*:*:*'
-                ]
-            })
-        );
     }
 }

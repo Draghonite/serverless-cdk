@@ -37,7 +37,7 @@ The `cdk.json` file tells the CDK Toolkit how to execute the app.
 ### Disclaimer 
 Use of this solution is for academic purposes only and neither this site nor contributors to this repository are liable for costs resulting from use of any automation code contained nor referenced within.  Use at your own discretion and ensure to understand the risks of provisioning cloud infrastructure and resources, especially through automation.  It is highly encouraged to have a solid understanding of the cloud service provider(s) used and the processes for identification of provisioned resources and related costs, as well as how to decommission resources to reduce and eliminate costs.
 
-### Credits:
+### Credits and Resources:
 - https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-aws-javascript.html
 - https://sbstjn.com/blog/aws-cdk-lambda-loadbalancer-vpc-certificate/
 - https://nikhil-zadoo.com/custom-resources-with-aws-cdk
@@ -48,3 +48,8 @@ Use of this solution is for academic purposes only and neither this site nor con
 - https://stackoverflow.com/questions/6248666/how-to-generate-short-uid-like-ax4j9z-in-js
 - https://app.diagrams.net/
 - https://aws.amazon.com/blogs/architecture/disaster-recovery-dr-architecture-on-aws-part-i-strategies-for-recovery-in-the-cloud/
+- https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-config-for-kms-objects.html
+- https://bobbyhadz.com/blog/environment-variables-aws-cdk
+- https://github.com/aws/aws-cdk/issues/3235
+- https://aws.amazon.com/premiumsupport/knowledge-center/s3-troubleshoot-replication/
+- https://www.digitalocean.com/community/tools/minify

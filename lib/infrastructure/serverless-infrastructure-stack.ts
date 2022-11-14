@@ -19,8 +19,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         
         const appId: string = scope.node.tryGetContext('appId');
         const region = props?.env?.region;
-        const destinationBucketRegion = (region !== infrastructureConfig.regions.primary) ? infrastructureConfig.regions.primary : infrastructureConfig.regions.secondary;
-        const appBucketName = `${infrastructureConfig.appBucketName}-${appId}-${region}`;
 
         const kmsKey = new Key(this, 'ServerlessAppS3KMS', {
             alias: infrastructureConfig.kmsAlias
