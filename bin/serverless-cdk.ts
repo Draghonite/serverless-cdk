@@ -15,12 +15,22 @@ const infrastructureConfig = InfrastructureConfig;
 if (!process.env.APP_ID && !infrastructureConfig.appId) {
     throw new Error("The 'appId' is not configured; either set the 'APP_ID' argument via CLI or the 'appId' InfrastructureConfig property.");
 }
+if (!process.env.HOSTED_ZONE_ID) {
+    throw new Error("The 'hostedZoneId' is not configured; set the 'HOSTED_ZONE_ID' via CLI");
+}
+if (!process.env.DNS_RECORD_SET) {
+    throw new Error("The 'recordSetName' is not configured; set the 'DNS_RECORD_SET' via CLI");
+}
 
 // extends the default context to pass additional parameters shared across all stacks in this application
 const appProps: AppProps = Object.assign({}, {
     context: {
         appId: process.env.APP_ID || infrastructureConfig.appId,
-        shouldConfigureReplication: /yes|true/i.test(process.env.INCLUDE_REPLICATION || '')
+        shouldConfigureReplication: /yes|true/i.test(process.env.INCLUDE_REPLICATION || ''),
+        recordSetName: process.env.DNS_RECORD_SET,
+        hostedZoneId: process.env.HOSTED_ZONE_ID,
+        primaryRegionTrafficWeight: process.env.PRIMARY_WEIGHT || infrastructureConfig.primaryRegionTrafficWeight,
+        secondaryRegionTrafficWeight: process.env.SECONDARY_WEIGHT || infrastructureConfig.secondaryRegionTrafficWeight
     }
 });
 const app = new cdk.App(appProps);

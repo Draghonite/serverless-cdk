@@ -1,18 +1,7 @@
 import { InfrastructureConfig } from '../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Construct } from 'constructs';
-import { InstanceClass, InstanceSize, InstanceType, SubnetType, Vpc } from 'aws-cdk-lib/aws-ec2';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import { AuroraEngineVersion, AuroraPostgresEngineVersion, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, PostgresEngineVersion, SubnetGroup } from 'aws-cdk-lib/aws-rds';
-import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
-import { CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import { Effect, PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
-import { Bucket, CfnBucket, CfnMultiRegionAccessPoint } from 'aws-cdk-lib/aws-s3';
-import { HostedZone } from 'aws-cdk-lib/aws-route53';
-import { Certificate, CertificateValidation } from 'aws-cdk-lib/aws-certificatemanager';
-import { Alias, Key } from 'aws-cdk-lib/aws-kms';
 
 export class ServerlessPreInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -21,8 +10,6 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
         const infrastructureConfig = InfrastructureConfig;
 
         const appId: string = scope.node.tryGetContext('appId');
-        // const region = props?.env?.region;
-        // const zoneName = infrastructureConfig.dnsZoneName.replace('{appId}', appId);
 
         const s3ReplicationRole = new Role(this, 'S3ReplicationRole', {
             assumedBy: new ServicePrincipal('s3.amazonaws.com'),
@@ -66,19 +53,5 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
                 ]
             })
         );
-
-        // const dnsZone = new HostedZone(this, 'ServerlessHostedZone', {
-        //     zoneName: zoneName,
-        // });
-
-        // const sslCert = new Certificate(this, 'ServerlessCertificate', {
-        //     domainName: zoneName,
-        //     validation: CertificateValidation.fromDns(dnsZone),
-        //     subjectAlternativeNames: [
-        //         `www.${zoneName}`,
-        //         zoneName,
-        //         `web.${zoneName}`
-        //     ]
-        // });
     }
 }

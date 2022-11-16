@@ -19,7 +19,6 @@ export const InfrastructureConfig = {
     lambdaCustomHandlerName: 'serverless-app-lambda-provider',
     lambdaCustomHandlerArnOutput: 'CustomLambdaReplicationHandlerArnOutput',
     s3ReplicationRoleName: 'serverless_app_s3_replication_role',
-    dnsZoneName: 'serverlessapp{appId}.com',
     dnsZoneOutput: 'ServerlessHostedZoneUrl',
     // availabilityZones: 3,
     globalDatabaseClusterName: 'global-serverless-db-cluster',
@@ -31,5 +30,7 @@ export const InfrastructureConfig = {
     regions: {
         primary: 'us-west-1',
         secondary: 'us-west-2'
-    }
+    },
+    primaryRegionTrafficWeight: 100,
+    secondaryRegionTrafficWeight: 0
 }

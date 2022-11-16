@@ -10,6 +10,7 @@ import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
 import { CfnOutput, Fn, RemovalPolicy } from 'aws-cdk-lib';
 import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal } from 'aws-cdk-lib/aws-iam';
 import { Alias, Key } from 'aws-cdk-lib/aws-kms';
+import { CfnRecordSet } from 'aws-cdk-lib/aws-route53';
 
 export class ServerlessInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -18,10 +19,24 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         const infrastructureConfig = InfrastructureConfig;
         
         const appId: string = scope.node.tryGetContext('appId');
-        // const region = props?.env?.region;
+        const region = props?.env?.region;
+        const recordSetName = scope.node.tryGetContext('recordSetName');
+        const hostedZoneId = scope.node.tryGetContext('hostedZoneId');
+        const primaryRegionTrafficWeight = scope.node.tryGetContext('primaryRegionTrafficWeight');
+        const secondaryRegionTrafficWeight = scope.node.tryGetContext('secondaryRegionTrafficWeight');
 
         const kmsKey = new Key(this, 'ServerlessAppS3KMS', {
             alias: infrastructureConfig.kmsAlias
+        });
+
+        const recordSet = new CfnRecordSet(this, 'RecordSet', {
+            name: recordSetName,
+            type: 'A',
+            hostedZoneId: hostedZoneId,
+            resourceRecords: [`192.168.0.${Math.floor(Math.random() * 100)}`], // TODO: point to the ALB
+            setIdentifier: `${region}-record`,
+            ttl: '5',
+            weight: region === infrastructureConfig.regions.primary ? +primaryRegionTrafficWeight : +secondaryRegionTrafficWeight
         });
 
         // TODO: add consistent tags to the resources -- "appname: serverless"
