@@ -21,6 +21,9 @@ if (!process.env.HOSTED_ZONE_ID) {
 if (!process.env.DNS_RECORD_SET) {
     throw new Error("The 'recordSetName' is not configured; set the 'DNS_RECORD_SET' via CLI");
 }
+if (!process.env.CERTIFICATE_DOMAIN_NAME) {
+    throw new Error("The 'hostedZoneName' is not configured; set the 'CERTIFICATE_DOMAIN_NAME' via CLI");
+}
 
 // extends the default context to pass additional parameters shared across all stacks in this application
 const appProps: AppProps = Object.assign({}, {
@@ -28,6 +31,7 @@ const appProps: AppProps = Object.assign({}, {
         appId: process.env.APP_ID || infrastructureConfig.appId,
         shouldConfigureReplication: /yes|true/i.test(process.env.INCLUDE_REPLICATION || ''),
         recordSetName: process.env.DNS_RECORD_SET,
+        certificateDomainName: process.env.CERTIFICATE_DOMAIN_NAME,
         hostedZoneId: process.env.HOSTED_ZONE_ID,
         primaryRegionTrafficWeight: process.env.PRIMARY_WEIGHT || infrastructureConfig.primaryRegionTrafficWeight,
         secondaryRegionTrafficWeight: process.env.SECONDARY_WEIGHT || infrastructureConfig.secondaryRegionTrafficWeight

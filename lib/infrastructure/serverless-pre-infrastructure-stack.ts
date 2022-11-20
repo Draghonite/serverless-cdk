@@ -1,7 +1,7 @@
 import { InfrastructureConfig } from '../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { Effect, PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
+import { Effect, ManagedPolicy, PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 
 export class ServerlessPreInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -32,10 +32,10 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
                     "s3:GetObjectVersionTagging"
                 ],
                 resources: [
-                    `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.primary}`,
-                    `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.primary}/*`,
-                    `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.secondary}`,
-                    `arn:aws:s3:::${infrastructureConfig.appBucketName}-${appId}-${infrastructureConfig.regions.secondary}/*`,
+                    `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.primary}`,
+                    `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.primary}/*`,
+                    `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.secondary}`,
+                    `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.secondary}/*`,
                 ]
             })
         );
@@ -51,6 +51,43 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
                 resources: [
                     'arn:aws:kms:*:*:*'
                 ]
+            })
+        );
+
+        const apiAuthorizerRole = new Role(this, 'ServerlessAPIAuthorizerRole', {
+            assumedBy: new ServicePrincipal('apigateway.amazonaws.com'),
+            path: '/service-role/',
+            roleName: `${infrastructureConfig.apiAuthorizerRoleName}-${appId}`
+        });
+        apiAuthorizerRole.addManagedPolicy(
+            ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
+        );
+        apiAuthorizerRole.addManagedPolicy(
+            ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole')
+        );
+        apiAuthorizerRole.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    'lambda:InvokeFunction',
+                    'lambda:InvokeAsync'
+                ],
+                resources: [
+                    `arn:aws:lambda:${infrastructureConfig.regions.primary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}`,
+                    `arn:aws:lambda:${infrastructureConfig.regions.secondary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}`,
+                    `arn:aws:lambda:${infrastructureConfig.regions.primary}:${this.account}:function:${infrastructureConfig.apiLambdaName}`,
+                    `arn:aws:lambda:${infrastructureConfig.regions.secondary}:${this.account}:function:${infrastructureConfig.apiLambdaName}`
+                ]
+            })
+        );
+        apiAuthorizerRole.addToPolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    'xray:PutTelemetryRecords',
+                    'xray:PutTraceSegments'
+                ],
+                resources: ['*']
             })
         );
     }
