@@ -1,9 +1,9 @@
-import { PolicyStatement, Effect, ArnPrincipal } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, Effect, ArnPrincipal, AnyPrincipal } from 'aws-cdk-lib/aws-iam';
 import { InfrastructureConfig } from './../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { BlockPublicAccess, Bucket, BucketEncryption, CfnBucket } from 'aws-cdk-lib/aws-s3';
-import { Fn } from 'aws-cdk-lib';
+import { Fn, RemovalPolicy } from 'aws-cdk-lib';
 import { Alias } from 'aws-cdk-lib/aws-kms';
 
 export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
@@ -22,7 +22,10 @@ export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
             blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
             encryption: BucketEncryption.KMS,
             encryptionKey: Alias.fromAliasName(this, 'ServerlessAppS3KMSLookup', infrastructureConfig.kmsAlias),
-            bucketKeyEnabled: true
+            bucketKeyEnabled: true,
+            // NOTE: following properties not for real-world use in most cases -- only to facilitate build-teardown/testing scenarios
+            autoDeleteObjects: true,
+            removalPolicy: RemovalPolicy.DESTROY
         });
         contentBucket.addToResourcePolicy(new PolicyStatement({
             effect: Effect.ALLOW,

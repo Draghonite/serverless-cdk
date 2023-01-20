@@ -1,21 +1,22 @@
 import { Certificate, CertificateValidation } from 'aws-cdk-lib/aws-certificatemanager';
-import { InfrastructureConfig } from './../../config/InfrastructureConfig';
+import { InfrastructureConfig, TagEnum } from './../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Construct } from 'constructs';
-import { InstanceClass, InstanceSize, InstanceType, SubnetType, Vpc } from 'aws-cdk-lib/aws-ec2';
+import { InstanceClass, InstanceSize, InstanceType, InterfaceVpcEndpoint, Peer, Port, SecurityGroup, SubnetType, Vpc } from 'aws-cdk-lib/aws-ec2';
 import { BlockPublicAccess, Bucket, BucketEncryption, CfnBucket } from 'aws-cdk-lib/aws-s3';
 import { AuroraEngineVersion, AuroraPostgresEngineVersion, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, PostgresEngineVersion, SubnetGroup } from 'aws-cdk-lib/aws-rds';
 import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
-import { CfnOutput, CfnResource, Fn, RemovalPolicy } from 'aws-cdk-lib';
-import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal } from 'aws-cdk-lib/aws-iam';
+import { CfnOutput, CfnResource, Fn, RemovalPolicy, Tags } from 'aws-cdk-lib';
+import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal, AnyPrincipal, PolicyDocument } from 'aws-cdk-lib/aws-iam';
 import { Alias, Key } from 'aws-cdk-lib/aws-kms';
 import { CfnRecordSet, HostedZone } from 'aws-cdk-lib/aws-route53';
-import { ApplicationLoadBalancer } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import { ApplicationListenerRule, ApplicationLoadBalancer, ApplicationTargetGroup, ListenerAction, ListenerCondition } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import { Tracing } from 'aws-cdk-lib/aws-lambda';
-import { AuthorizationType, CfnAuthorizer, DomainName, RequestAuthorizer } from 'aws-cdk-lib/aws-apigateway';
+import { AuthorizationType, CfnAuthorizer, DomainName, EndpointType, RequestAuthorizer } from 'aws-cdk-lib/aws-apigateway';
+import { AwsCustomResource, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 
 export class ServerlessInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -34,6 +35,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         const kmsKey = new Key(this, 'ServerlessAppS3KMS', {
             alias: infrastructureConfig.kmsAlias
         });
+        Tags.of(kmsKey).add(TagEnum.APPLICATION_ID, appId);
 
         const hostedZone = HostedZone.fromHostedZoneId(this, 'HostedZoneLookup', hostedZoneId);
 
@@ -61,27 +63,128 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             //     }
             // ]
         });
+        Tags.of(vpc).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(vpc).add(TagEnum.NAME, infrastructureConfig.vpcName);
+
+        const albSecurityGroup = new SecurityGroup(this, 'ServerlessALBSG', {
+            vpc: vpc,
+            allowAllOutbound: true
+        });
+        albSecurityGroup.addIngressRule(
+            infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(), 
+            Port.tcp(443)
+        );
+        Tags.of(albSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(albSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.appName}-alb-${appId}-${region}-sg`);
 
         const alb = new ApplicationLoadBalancer(this, 'ServerlessAppALB', {
-            loadBalancerName: `${infrastructureConfig.loadBalancerName}-${region}`,
+            loadBalancerName: `${infrastructureConfig.loadBalancerName}-${appId}-${region}`,
             vpc: vpc,
-            internetFacing: true
+            internetFacing: true, // TODO: replace w/ !infrastructureConfig.isInternal,
+            securityGroup: albSecurityGroup,
         });
-        // const listenerHTTPS = alb.addListener('ServerlessHTTPSListener', {
-        //     port: 443,
-        //     certificates: [certificate]
-        // });
-        // listenerHTTPS.addTargets('ServerlessHTTPSListenerTargets', {
-        //     targets: [new targets.IpTarget(`192.168.0.${Math.floor(Math.random() * 100)}`, 443)] // TODO: what should these represent?
-        // });
+        // alb.logAccessLogs(Bucket.fromBucketArn(this, 'ServerlessALBAccessLogsBucketLookup', `arn:aws:s3:::${infrastructureConfig.accessLogsBucketname}-${appId}-${region}`));
+        Tags.of(alb).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(alb).add(TagEnum.NAME, `${infrastructureConfig.loadBalancerName}-${appId}-${region}`);
+
+        const vpceSecurityGroup = new SecurityGroup(this, 'ServerlessVPCESG', {
+            vpc: vpc,
+            allowAllOutbound: true
+        });
+        vpceSecurityGroup.addIngressRule(
+            infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
+            Port.tcp(443)
+        );
+        Tags.of(vpceSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(vpceSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.vpcEndpointName}-${appId}-${region}-sg`);
+
+        const vpcEndpoint = new InterfaceVpcEndpoint(this, 'ServerlessAppVPCEndpoint', {
+            vpc: vpc,
+            service: {
+                name: `com.amazonaws.${region}.execute-api`,
+                port: 443
+            },
+            privateDnsEnabled: true,
+            securityGroups: [albSecurityGroup, vpceSecurityGroup]
+        });
+        vpcEndpoint.addToPolicy(new PolicyStatement({
+            actions: [ 'execute-api:Invoke' ],
+            resources: [ `arn:aws:execute-api:${region}:*:*` ],
+            effect: Effect.ALLOW,
+            principals: [ new AnyPrincipal() ]
+        }));
+        Tags.of(vpcEndpoint).add(TagEnum.NAME, `${infrastructureConfig.vpcEndpointName}-${appId}-${region}`);
+        Tags.of(vpcEndpoint).add(TagEnum.APPLICATION_ID, appId);
+        // TODO: creates an additional cryptic lambda function -- see about providing a consistent resource/function name
+        const describeENI = new AwsCustomResource(this, 'DescribeNetworkInterfaces', {
+            functionName: `${infrastructureConfig.customResourceLambdaName}-${appId}-${region}`,
+            onCreate: {
+                service: 'EC2',
+                action: 'describeNetworkInterfaces',
+                parameters: {
+                    NetworkInterfaceIds: vpcEndpoint.vpcEndpointNetworkInterfaceIds
+                },
+                physicalResourceId: PhysicalResourceId.of(Date.now().toString())
+            },
+            onUpdate: {
+                service: 'EC2',
+                action: 'describeNetworkInterfaces',
+                parameters: {
+                    NetworkInterfaceIds: vpcEndpoint.vpcEndpointNetworkInterfaceIds
+                },
+                physicalResourceId: PhysicalResourceId.of(Date.now().toString())
+            },
+            policy: {
+                statements: [
+                    new PolicyStatement({
+                        actions: ['ec2:DescribeNetworkInterfaces'],
+                        resources: ['*']
+                    })
+                ]
+            }
+        });
+        const vpcEndpointIp1 = describeENI.getResponseFieldReference('NetworkInterfaces.0.PrivateIpAddress');
+        const vpcEndpointIp2 = describeENI.getResponseFieldReference('NetworkInterfaces.1.PrivateIpAddress');
+
+        // TODO: look into using more restrictive/protective 'Security policy' option
+        const listenerHTTPS = alb.addListener('ServerlessHTTPSListener', {
+            port: 443,
+            certificates: [certificate],
+            defaultAction: ListenerAction.fixedResponse(404, {
+                contentType: 'text/plain',
+                messageBody: 'Page not found'
+            })
+        });
+
+        const albTargetGroup = new ApplicationTargetGroup(this, 'ServerlessAppALBAppTG', {
+            targetGroupName: `${infrastructureConfig.targetGroupName}-${appId}-${region}`,
+            vpc: vpc,
+            port: 443,
+            targets: [ 
+                new targets.IpTarget(vpcEndpointIp1.toString(), 443),
+                new targets.IpTarget(vpcEndpointIp2.toString(), 443)
+            ]
+        });
+
+        const albListenerRule = new ApplicationListenerRule(this, 'ServerlessAppALBAPIRule', {
+            listener: listenerHTTPS,
+            priority: 1,
+            conditions: [
+                ListenerCondition.pathPatterns(['/api/*', '/app/*'])
+            ],
+            action: ListenerAction.forward([ albTargetGroup ])
+        });
 
         const recordSet = new CfnRecordSet(this, 'RecordSet', {
             name: recordSetName,
             type: 'A',
             hostedZoneId: hostedZoneId,
-            resourceRecords: [`192.168.0.${Math.floor(Math.random() * 100)}`], // TODO: point to the ALB'
+            aliasTarget: {
+                dnsName: alb.loadBalancerDnsName,
+                hostedZoneId: alb.loadBalancerCanonicalHostedZoneId,
+                evaluateTargetHealth: false
+            },
             setIdentifier: `${region}-record`,
-            ttl: '5',
             weight: region === infrastructureConfig.regions.primary ? +primaryRegionTrafficWeight : +secondaryRegionTrafficWeight
         });
         
@@ -119,8 +222,20 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         // TODO: grant the permissions to the bucket(s) through the lambda's execution role instead -- so 'appBucket' isn't required
         // appBucket.grantReadWrite(lambdaApp);
 
+        // TODO: properly secure -- specific ports
+        const lambdaApiSecurityGroup = new SecurityGroup(this, 'LambdaApiSG', {
+            vpc: vpc,
+            allowAllOutbound: true
+        });
+        lambdaApiSecurityGroup.addIngressRule(
+            infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
+            Port.allTraffic()
+        );
+        Tags.of(lambdaApiSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(lambdaApiSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.apiLambdaName}-${appId}-${region}-sg`);
+
         const lambdaApi = new lambda.Function(this, 'LambdaApiHandler', {
-            functionName: infrastructureConfig.apiLambdaName,
+            functionName: `${infrastructureConfig.apiLambdaName}-${appId}-${region}`,
             runtime: lambda.Runtime.NODEJS_16_X,
             code: lambda.Code.fromAsset('resource-api-lambda'),
             handler: 'index.main',
@@ -132,14 +247,29 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             // }
             environmentEncryption: kmsKey,
             tracing: infrastructureConfig.xrayTracingEnabled ? Tracing.ACTIVE : Tracing.DISABLED,
+            securityGroups: [lambdaApiSecurityGroup],
             environment: {
                 BUCKET: `${infrastructureConfig.contentBucketName}-${appId}-${region}`,
                 // TODO: configure endpoint for the database
-            }
+            },
+            // TODO: apply a custom role; errors: The policy ServerlessAppExecutionRoleLookupPolicyA389FE16 already exists on the role serverless_app_execution_role-appid.
+            // role: Role.fromRoleArn(this, 'ServerlessAppExecutionRoleLookup', `arn:aws:iam::${this.account}:role/service-role/${infrastructureConfig.appExecutionRoleName}-${appId}`)
         });
 
+        // TODO: properly secure -- specific ports
+        const lambdaApiAuthorizerSecurityGroup = new SecurityGroup(this, 'LambdaApiAuthorizerSG', {
+            vpc: vpc,
+            allowAllOutbound: true
+        });
+        lambdaApiAuthorizerSecurityGroup.addIngressRule(
+            infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
+            Port.allTraffic()
+        );
+        Tags.of(lambdaApiAuthorizerSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(lambdaApiAuthorizerSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${region}-sg`);
+
         const lambdaApiAuthorizer = new lambda.Function(this, 'LambdaApiAuthorizer', {
-            functionName: infrastructureConfig.apiAuthorizerLambdaName,
+            functionName: `${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${region}`,
             runtime: lambda.Runtime.NODEJS_16_X,
             code: lambda.Code.fromAsset('resource-api-authorizer-lambda'),
             handler: 'index.main',
@@ -148,15 +278,31 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             vpc: vpc,
             environmentEncryption: kmsKey,
             tracing: infrastructureConfig.xrayTracingEnabled ? Tracing.ACTIVE : Tracing.DISABLED,
+            securityGroups: [lambdaApiAuthorizerSecurityGroup],
             environment: {
                 JWT_SECRET: infrastructureConfig.jwtTokenSecret,
+                LAMBDA_API_ARN: lambdaApi.functionArn,
+                S3_CONTENT_ARN: `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${region}`
             }
         });
 
+        // TODO: much more to configure to allow {proxy+} integration and OPTIONS under a hierarchy
+        // e.g. /v1/{proxy+}/ANY|OPTIONS where ANY and OPTIONS are separate methods 3-level deep
         const restAPI = new apigateway.RestApi(this, 'ServerlessAPI', {
-            restApiName: infrastructureConfig.restApiName,
+            restApiName: `${infrastructureConfig.restApiName}-${appId}-${region}`,
             description: infrastructureConfig.restApiDescription,
-            disableExecuteApiEndpoint: infrastructureConfig.apiExecuteApiEndpointDisabled
+            disableExecuteApiEndpoint: infrastructureConfig.apiExecuteApiEndpointDisabled,
+            endpointTypes: [EndpointType.REGIONAL],
+            policy: new PolicyDocument({
+                statements: [
+                    new PolicyStatement({
+                        actions: [ 'execute-api:Invoke' ],
+                        resources: [ `arn:aws:execute-api:${region}:*:*` ],
+                        effect: Effect.ALLOW,
+                        principals: [ new AnyPrincipal() ]
+                    })
+                ]
+            })
         });
 
         const restAPIAuthorizer = new CfnAuthorizer(this, 'ServerlessAPIAuthorizer', {
@@ -182,13 +328,14 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
 
         // TODO: DNS -> ALB -> CDN -> APIGW -> Lambda auth -> Lambda api
         const apiDomain = new DomainName(this, 'ServerlessAPIDomain', {
-            domainName: recordSetName,
             certificate: certificate,
-            basePath: infrastructureConfig.cdnBasePath
+            domainName: recordSetName,
+            basePath: '/'
         });
         apiDomain.addBasePathMapping(restAPI, {
             basePath: infrastructureConfig.cdnApiBasePath
         });
+        // TODO: add bath for /app
 
 
         // TODO: consider if this (or at least route 53 config) belongs in dr infrastructure stack

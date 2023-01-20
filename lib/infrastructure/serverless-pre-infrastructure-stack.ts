@@ -11,84 +11,130 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
 
         const appId: string = scope.node.tryGetContext('appId');
 
-        const s3ReplicationRole = new Role(this, 'S3ReplicationRole', {
+        // #region S3 Replication Role
+
+        new Role(this, 'S3ReplicationRole', {
             assumedBy: new ServicePrincipal('s3.amazonaws.com'),
             path: '/service-role/',
-            roleName: `${infrastructureConfig.s3ReplicationRoleName}-${appId}`
+            roleName: `${infrastructureConfig.s3ReplicationRoleName}-${appId}`,
+            managedPolicies: [
+                new ManagedPolicy(this, 'S3ReplicationRoleManagedPolicy', {
+                    managedPolicyName: `S3ReplicationRoleManagedPolicy-${appId}`,
+                    statements: [
+                        new PolicyStatement({
+                            effect: Effect.ALLOW,
+                            actions: [
+                                "s3:ListBucket",
+                                "s3:GetReplicationConfiguration",
+                                "s3:GetObjectVersionForReplication",
+                                "s3:GetObjectVersionAcl",
+                                "s3:GetObjectLegalHold",
+                                "s3:GetObjectRetention",
+                                "s3:ReplicateObject",
+                                "s3:ReplicateDelete",
+                                "s3:ReplicateTags",
+                                "s3:GetObjectVersionTagging"
+                            ],
+                            resources: [
+                                `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.primary}`,
+                                `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.primary}/*`,
+                                `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.secondary}`,
+                                `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.secondary}/*`,
+                            ]
+                        }),
+                        new PolicyStatement({
+                            effect: Effect.ALLOW,
+                            actions: [
+                                "kms:Encrypt",
+                                "kms:Decrypt",
+                                "kms:ReEncrypt*",
+                                "kms:GenerateDataKey"
+                            ],
+                            resources: [
+                                'arn:aws:kms:*:*:*'
+                            ]
+                        })
+                    ]
+                })
+            ]
         });
-        s3ReplicationRole.addToPolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: [
-                    "s3:ListBucket",
-                    "s3:GetReplicationConfiguration",
-                    "s3:GetObjectVersionForReplication",
-                    "s3:GetObjectVersionAcl",
-                    "s3:GetObjectLegalHold",
-                    "s3:GetObjectRetention",
-                    "s3:ReplicateObject",
-                    "s3:ReplicateDelete",
-                    "s3:ReplicateTags",
-                    "s3:GetObjectVersionTagging"
-                ],
-                resources: [
-                    `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.primary}`,
-                    `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.primary}/*`,
-                    `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.secondary}`,
-                    `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${infrastructureConfig.regions.secondary}/*`,
-                ]
-            })
-        );
-        s3ReplicationRole.addToPolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: [
-                    "kms:Encrypt",
-                    "kms:Decrypt",
-                    "kms:ReEncrypt*",
-                    "kms:GenerateDataKey"
-                ],
-                resources: [
-                    'arn:aws:kms:*:*:*'
-                ]
-            })
-        );
 
-        const apiAuthorizerRole = new Role(this, 'ServerlessAPIAuthorizerRole', {
+        // #endregion
+
+        // #region App Execution Role
+
+        new Role(this, 'ServerlessAppExecutionRole', {
+            assumedBy: new ServicePrincipal('lambda.amazonaws.com'),
+            path: '/service-role/',
+            roleName: `${infrastructureConfig.appExecutionRoleName}-${appId}`,
+            managedPolicies: [
+                ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+                ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole'),
+                new ManagedPolicy(this, 'ServerlessAppExecutionRoleManagedPolicy', {
+                    managedPolicyName: `ServerlessAppExecutionRoleManagedPolicy-${appId}`,
+                    statements: [
+                        new PolicyStatement({
+                            effect: Effect.ALLOW,
+                            actions: [
+                                'lambda:InvokeFunction',
+                                'lambda:InvokeAsync'
+                            ],
+                            resources: [
+                                `arn:aws:lambda:${infrastructureConfig.regions.primary}:${this.account}:function:${infrastructureConfig.apiLambdaName}-${appId}-${infrastructureConfig.regions.primary}`,
+                                `arn:aws:lambda:${infrastructureConfig.regions.secondary}:${this.account}:function:${infrastructureConfig.apiLambdaName}-${appId}-${infrastructureConfig.regions.secondary}`
+                            ]
+                        }),
+                        new PolicyStatement({
+                            effect: Effect.ALLOW,
+                            actions: [
+                                'xray:PutTelemetryRecords',
+                                'xray:PutTraceSegments'
+                            ],
+                            resources: ['*']
+                        })
+                    ]
+                })
+            ]
+        });
+
+        // #endregion
+
+        // #region API Authorizer Role
+
+        new Role(this, 'ServerlessAPIAuthorizerRole', {
             assumedBy: new ServicePrincipal('apigateway.amazonaws.com'),
             path: '/service-role/',
-            roleName: `${infrastructureConfig.apiAuthorizerRoleName}-${appId}`
+            roleName: `${infrastructureConfig.apiAuthorizerRoleName}-${appId}`,
+            managedPolicies: [
+                ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+                ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole'),
+                new ManagedPolicy(this, 'ServerlessAPIAuthorizerRoleManagedPolicy', {
+                    managedPolicyName: `ServerlessAPIAuthorizerRoleManagedPolicy-${appId}`,
+                    statements: [
+                        new PolicyStatement({
+                            effect: Effect.ALLOW,
+                            actions: [
+                                'lambda:InvokeFunction',
+                                'lambda:InvokeAsync'
+                            ],
+                            resources: [
+                                `arn:aws:lambda:${infrastructureConfig.regions.primary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${infrastructureConfig.regions.primary}`,
+                                `arn:aws:lambda:${infrastructureConfig.regions.secondary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${infrastructureConfig.regions.primary}`
+                            ]
+                        }),
+                        new PolicyStatement({
+                            effect: Effect.ALLOW,
+                            actions: [
+                                'xray:PutTelemetryRecords',
+                                'xray:PutTraceSegments'
+                            ],
+                            resources: ['*']
+                        })
+                    ]
+                })
+            ]
         });
-        apiAuthorizerRole.addManagedPolicy(
-            ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
-        );
-        apiAuthorizerRole.addManagedPolicy(
-            ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole')
-        );
-        apiAuthorizerRole.addToPolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: [
-                    'lambda:InvokeFunction',
-                    'lambda:InvokeAsync'
-                ],
-                resources: [
-                    `arn:aws:lambda:${infrastructureConfig.regions.primary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}`,
-                    `arn:aws:lambda:${infrastructureConfig.regions.secondary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}`,
-                    `arn:aws:lambda:${infrastructureConfig.regions.primary}:${this.account}:function:${infrastructureConfig.apiLambdaName}`,
-                    `arn:aws:lambda:${infrastructureConfig.regions.secondary}:${this.account}:function:${infrastructureConfig.apiLambdaName}`
-                ]
-            })
-        );
-        apiAuthorizerRole.addToPolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: [
-                    'xray:PutTelemetryRecords',
-                    'xray:PutTraceSegments'
-                ],
-                resources: ['*']
-            })
-        );
+
+        // #endregion
     }
 }

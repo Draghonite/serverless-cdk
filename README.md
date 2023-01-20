@@ -14,7 +14,7 @@ Knowledge of and prior configuration of the AWS CDK is assumed.  See below for u
 * `cdk deploy --all` deploys the app without environment variables but expects that the `appId` parameter be configured in the application's configuration file (see InfrastructureConfig.ts); if not configured, then a detailed exception notifies of this pre-requisite.
 * `APP_ID={appid} cdk deploy --all` deploys the application and all the stacks configured (see serverless-cdk.ts), in the appropriate sequence.  This sets the `APP_ID` environment variable, resolving the `appId` required value.
 * `APP_ID={appid} INCLUDE_REPLICATION={yes|true} cdk deploy --all` deploys the app with the `APP_ID` environment variables and the `INCLUDE_REPLICATION` option with a truthy value (yes/true, non-case sensitive); setting this option ensures that the S3 content buckets receive the configuration of S3 Replication rules appropriately cross-region.
-* `APP_ID={appid} INCLUDE_REPLICATION={yes|true} DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} cdk deploy --all` deploys same as above and includes additional required options to configure Route 53 weighted record sets into an existing hosting zone using the hosting zone's unique id and the desired name for the weighted record set (e.g. 'subdomain.domain.net').  NOTE: this assumes an existing hosting zone, configuration of which is outside the scope of this project.
+* `APP_ID={appid} INCLUDE_REPLICATION={yes|true} DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} cdk deploy --all` deploys same as above and includes additional required options to configure Route 53 weighted record sets into an existing hosting zone using the hosting zone's unique id and the desired name for the weighted record set (e.g. 'subdomain.domain.net'), as well as the SSL/TLS certificate's domain name (e.g. '*.domain.net').  NOTE: this assumes an existing hosting zone and ACM certificate, configuration of which is outside the scope of this project.
 
 NOTE: It is important to note that in order to deploy the S3 Replication rules across regions/stacks, a basic deployment must first be completed WITHOUT the rules, followed by the same deployment -- same stack(s) -- but with the replication options in place.  To accomplish this, deploy the app without, then with the `INCLUDE_REPLICATION` environment variable set.
 
@@ -22,6 +22,9 @@ NOTE: Replace the tokens in the example accordingly; these are defined below:
 
 - `{appid}` is a unique identifier for the CDK application and is used throughout the project to ensure uniqueness in certain cases; for instance in the naming of the S3 Buckets where global uniqueness is required.  While the length constraints for this value actually depend on the specific resource that uses the appId, a short value (1-10 characters) is recommended.
 - `INCLUDE_REPLICATION={yes|true}` provides the optional configuration of S3 Replication rules, used by conditional logic in the appropriate stack.
+- `DNS_RECORD_SET` TODO: define
+- `HOSTED_ZONE` TODO: define
+- `CERTIFICATE_DOMAIN_NAME` TODO: define
 
 The `cdk.json` file tells the CDK Toolkit how to execute the app.
 
@@ -57,3 +60,6 @@ Use of this solution is for academic purposes only and neither this site nor con
 - https://www.digitalocean.com/community/tools/minify
 - http://jwtbuilder.jamiekurtz.com/
 - https://5k-team.trilogy.com/hc/en-us/articles/360016983399-Custom-Authorizer-in-API-Gateway-REST-CDK-Recipe
+- https://aws.plainenglish.io/custom-dns-for-private-api-gateway-5940cb4889a8
+- https://aws.amazon.com/blogs/networking-and-content-delivery/starting-small-with-aws-global-accelerator/
+- https://repost.aws/questions/QUjISNyk6aTA6jZgZQwKWf4Q/how-to-connect-a-load-balancer-and-an-interface-vpc-endpoint-together-using-cdk

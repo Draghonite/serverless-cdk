@@ -2,8 +2,7 @@
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { AppProps } from 'aws-cdk-lib';
-import * as uuid from 'uuid';
-import { ServerlessPostInfrastructureStack } from './../lib/infrastructure/serverless-post-infrastructure-stack';
+// import { ServerlessPostInfrastructureStack } from './../lib/infrastructure/serverless-post-infrastructure-stack';
 import { InfrastructureConfig } from './../config/InfrastructureConfig';
 import { ServerlessInfrastructureStack } from '../lib/infrastructure/serverless-infrastructure-stack';
 import { ServerlessPreInfrastructureStack } from '../lib/infrastructure/serverless-pre-infrastructure-stack';
@@ -44,19 +43,14 @@ const preStack = new ServerlessPreInfrastructureStack(app, 'ServerlessPreInfrast
     stackName: 'ServerlessPreInfrastructureStack'
 });
 
-const primaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion1', {
-    env: { region: infrastructureConfig.regions.primary },
-    stackName: 'ServerlessInfrastructureStack'
-});
-
 // content s3 region1
 const primaryRegionContentBucketStack = new ServerlessInfrastructureContentBucketStack(app, 'ServerlessInfrastructureContentBucketStack1', {
     env: { region: infrastructureConfig.regions.primary },
     stackName: 'ServerlessInfrastructureContentBucketStack'
 });
 
-const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion2', {
-    env: { region: infrastructureConfig.regions.secondary },
+const primaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion1', {
+    env: { region: infrastructureConfig.regions.primary },
     stackName: 'ServerlessInfrastructureStack'
 });
 
@@ -66,6 +60,11 @@ const secondaryRegionContentBucketStack = new ServerlessInfrastructureContentBuc
     stackName: 'ServerlessInfrastructureContentBucketStack'
 });
 
+const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessInfrastructureStackRegion2', {
+    env: { region: infrastructureConfig.regions.secondary },
+    stackName: 'ServerlessInfrastructureStack'
+});
+
 // const postStack = new ServerlessPostInfrastructureStack(app, 'ServerlessPostInfrastructureStack', {
 //     env: {
 //         region: infrastructureConfig.regions.primary,
@@ -73,11 +72,17 @@ const secondaryRegionContentBucketStack = new ServerlessInfrastructureContentBuc
 //     }
 // });
 
+// primaryRegionContentBucketStack.addDependency(preStack);
+// primaryRegionStack.addDependency(primaryRegionContentBucketStack);
+// secondaryRegionContentBucketStack.addDependency(primaryRegionStack);
+// secondaryRegionStack.addDependency(secondaryRegionContentBucketStack);
+
 primaryRegionStack.addDependency(preStack);
 secondaryRegionStack.addDependency(preStack);
 primaryRegionContentBucketStack.addDependency(primaryRegionStack);
 secondaryRegionStack.addDependency(primaryRegionContentBucketStack);
 secondaryRegionContentBucketStack.addDependency(secondaryRegionStack);
+
 // postStack.addDependency(preStack);
 // postStack.addDependency(primaryRegionStack);
 // postStack.addDependency(secondaryRegionStack);

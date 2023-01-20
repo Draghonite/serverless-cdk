@@ -1,11 +1,14 @@
 export const InfrastructureConfig = {
     appId: '',
+    appName: 'serverless',
+    isInternal: false, // TODO: consider making internal/private app
     vpcName: 'serverless-vpc',
     vpcCIDR: '10.0.0.0/24',
     vpcIdOutput: 'ServerlessVPCId',
-    vpcSubnetGroupNames: [
-        'PrivateSubnetLambda','PrivateSubnetRDS'
-    ],
+    // vpcSubnetGroupNames: [
+    //     'PrivateSubnetLambda','PrivateSubnetRDS'
+    // ],
+    vpcEndpointName: 'serverless-vpc-endpoint',
     kmsAlias: 'alias/serverlessappkey',
     restApiName: 'Serverless API',
     restApiDescription: 'API that provides an access point for the application',
@@ -17,12 +20,14 @@ export const InfrastructureConfig = {
     // appBucketNameOutput: 'ServerlessAppBucketName',
     contentBucketName: 'serverless-content',
     appLambdaName: 'serverless-app',
+    appExecutionRoleName: 'serverless_app_execution_role',
     apiLambdaName: 'serverless-api',
+    customResourceLambdaName: 'serverless-api-custom-resource',
     apiAuthorizerName: 'serverless-api-authorizer',
     apiAuthorizerTTL: 5, // TODO: increase to default (300) or appropriate
     apiAuthorizerLambdaName: 'serverless-api-authorizer',
     apiAuthorizerRoleName: 'serverless_api_authorizer_role',
-    apiExecuteApiEndpointDisabled: false, // TODO: consider disabling (true) if not needed once exposed via ALB; can also make configurable
+    apiExecuteApiEndpointDisabled: false, // TODO: consider disabling (true) if not needed once exposed via ALB/CDN; can also make configurable
     appLambdaSubnetGroupName: 'PrivateSubnetLambda',
     lambdaCustomHandlerName: 'serverless-app-lambda-provider',
     // lambdaCustomHandlerArnOutput: 'CustomLambdaReplicationHandlerArnOutput',
@@ -42,7 +47,14 @@ export const InfrastructureConfig = {
     primaryRegionTrafficWeight: 100,
     secondaryRegionTrafficWeight: 0,
     loadBalancerName: 'serverless-alb',
+    accessLogsBucketname: 'serverless-access-logs',
+    targetGroupName: 'serverless-tg',
     // TODO: parameterize or more securely store as a secret, but DO NOT use as-is (esp. production)
     jwtTokenSecret: 'qwertyuiopasdfghjklzxcvbnm123456',
     xrayTracingEnabled: true
+}
+
+export enum TagEnum {
+    NAME = 'Name',
+    APPLICATION_ID = 'ApplicationId'
 }
