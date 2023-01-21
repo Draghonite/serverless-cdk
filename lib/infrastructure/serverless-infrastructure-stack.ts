@@ -11,9 +11,8 @@ import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
 import { CfnOutput, CfnResource, Fn, RemovalPolicy, Tags } from 'aws-cdk-lib';
 import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal, AnyPrincipal, PolicyDocument } from 'aws-cdk-lib/aws-iam';
 import { Alias, Key } from 'aws-cdk-lib/aws-kms';
-import { CfnRecordSet, HostedZone } from 'aws-cdk-lib/aws-route53';
+import { ARecord, CfnRecordSet, HostedZone, IAliasRecordTarget, RecordTarget } from 'aws-cdk-lib/aws-route53';
 import { ApplicationListenerRule, ApplicationLoadBalancer, ApplicationTargetGroup, ListenerAction, ListenerCondition } from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import { Tracing } from 'aws-cdk-lib/aws-lambda';
 import { AuthorizationType, CfnAuthorizer, DomainName, EndpointType, RequestAuthorizer } from 'aws-cdk-lib/aws-apigateway';
 import { AwsCustomResource, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
@@ -65,128 +64,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         });
         Tags.of(vpc).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(vpc).add(TagEnum.NAME, infrastructureConfig.vpcName);
-
-        const albSecurityGroup = new SecurityGroup(this, 'ServerlessALBSG', {
-            vpc: vpc,
-            allowAllOutbound: true
-        });
-        albSecurityGroup.addIngressRule(
-            infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(), 
-            Port.tcp(443)
-        );
-        Tags.of(albSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
-        Tags.of(albSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.appName}-alb-${appId}-${region}-sg`);
-
-        const alb = new ApplicationLoadBalancer(this, 'ServerlessAppALB', {
-            loadBalancerName: `${infrastructureConfig.loadBalancerName}-${appId}-${region}`,
-            vpc: vpc,
-            internetFacing: true, // TODO: replace w/ !infrastructureConfig.isInternal,
-            securityGroup: albSecurityGroup,
-        });
-        // alb.logAccessLogs(Bucket.fromBucketArn(this, 'ServerlessALBAccessLogsBucketLookup', `arn:aws:s3:::${infrastructureConfig.accessLogsBucketname}-${appId}-${region}`));
-        Tags.of(alb).add(TagEnum.APPLICATION_ID, appId);
-        Tags.of(alb).add(TagEnum.NAME, `${infrastructureConfig.loadBalancerName}-${appId}-${region}`);
-
-        const vpceSecurityGroup = new SecurityGroup(this, 'ServerlessVPCESG', {
-            vpc: vpc,
-            allowAllOutbound: true
-        });
-        vpceSecurityGroup.addIngressRule(
-            infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
-            Port.tcp(443)
-        );
-        Tags.of(vpceSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
-        Tags.of(vpceSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.vpcEndpointName}-${appId}-${region}-sg`);
-
-        const vpcEndpoint = new InterfaceVpcEndpoint(this, 'ServerlessAppVPCEndpoint', {
-            vpc: vpc,
-            service: {
-                name: `com.amazonaws.${region}.execute-api`,
-                port: 443
-            },
-            privateDnsEnabled: true,
-            securityGroups: [albSecurityGroup, vpceSecurityGroup]
-        });
-        vpcEndpoint.addToPolicy(new PolicyStatement({
-            actions: [ 'execute-api:Invoke' ],
-            resources: [ `arn:aws:execute-api:${region}:*:*` ],
-            effect: Effect.ALLOW,
-            principals: [ new AnyPrincipal() ]
-        }));
-        Tags.of(vpcEndpoint).add(TagEnum.NAME, `${infrastructureConfig.vpcEndpointName}-${appId}-${region}`);
-        Tags.of(vpcEndpoint).add(TagEnum.APPLICATION_ID, appId);
-        // TODO: creates an additional cryptic lambda function -- see about providing a consistent resource/function name
-        const describeENI = new AwsCustomResource(this, 'DescribeNetworkInterfaces', {
-            functionName: `${infrastructureConfig.customResourceLambdaName}-${appId}-${region}`,
-            onCreate: {
-                service: 'EC2',
-                action: 'describeNetworkInterfaces',
-                parameters: {
-                    NetworkInterfaceIds: vpcEndpoint.vpcEndpointNetworkInterfaceIds
-                },
-                physicalResourceId: PhysicalResourceId.of(Date.now().toString())
-            },
-            onUpdate: {
-                service: 'EC2',
-                action: 'describeNetworkInterfaces',
-                parameters: {
-                    NetworkInterfaceIds: vpcEndpoint.vpcEndpointNetworkInterfaceIds
-                },
-                physicalResourceId: PhysicalResourceId.of(Date.now().toString())
-            },
-            policy: {
-                statements: [
-                    new PolicyStatement({
-                        actions: ['ec2:DescribeNetworkInterfaces'],
-                        resources: ['*']
-                    })
-                ]
-            }
-        });
-        const vpcEndpointIp1 = describeENI.getResponseFieldReference('NetworkInterfaces.0.PrivateIpAddress');
-        const vpcEndpointIp2 = describeENI.getResponseFieldReference('NetworkInterfaces.1.PrivateIpAddress');
-
-        // TODO: look into using more restrictive/protective 'Security policy' option
-        const listenerHTTPS = alb.addListener('ServerlessHTTPSListener', {
-            port: 443,
-            certificates: [certificate],
-            defaultAction: ListenerAction.fixedResponse(404, {
-                contentType: 'text/plain',
-                messageBody: 'Page not found'
-            })
-        });
-
-        const albTargetGroup = new ApplicationTargetGroup(this, 'ServerlessAppALBAppTG', {
-            targetGroupName: `${infrastructureConfig.targetGroupName}-${appId}-${region}`,
-            vpc: vpc,
-            port: 443,
-            targets: [ 
-                new targets.IpTarget(vpcEndpointIp1.toString(), 443),
-                new targets.IpTarget(vpcEndpointIp2.toString(), 443)
-            ]
-        });
-
-        const albListenerRule = new ApplicationListenerRule(this, 'ServerlessAppALBAPIRule', {
-            listener: listenerHTTPS,
-            priority: 1,
-            conditions: [
-                ListenerCondition.pathPatterns(['/api/*', '/app/*'])
-            ],
-            action: ListenerAction.forward([ albTargetGroup ])
-        });
-
-        const recordSet = new CfnRecordSet(this, 'RecordSet', {
-            name: recordSetName,
-            type: 'A',
-            hostedZoneId: hostedZoneId,
-            aliasTarget: {
-                dnsName: alb.loadBalancerDnsName,
-                hostedZoneId: alb.loadBalancerCanonicalHostedZoneId,
-                evaluateTargetHealth: false
-            },
-            setIdentifier: `${region}-record`,
-            weight: region === infrastructureConfig.regions.primary ? +primaryRegionTrafficWeight : +secondaryRegionTrafficWeight
-        });
         
         // TODO: configure security group(s) for the VPC to allow common protocols: 80, 443, 5432
 
@@ -229,7 +106,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         });
         lambdaApiSecurityGroup.addIngressRule(
             infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
-            Port.allTraffic()
+            Port.tcp(443)
         );
         Tags.of(lambdaApiSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(lambdaApiSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.apiLambdaName}-${appId}-${region}-sg`);
@@ -263,7 +140,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         });
         lambdaApiAuthorizerSecurityGroup.addIngressRule(
             infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
-            Port.allTraffic()
+            Port.tcp(443)
         );
         Tags.of(lambdaApiAuthorizerSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(lambdaApiAuthorizerSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${region}-sg`);
@@ -326,7 +203,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         (resource as CfnResource).addPropertyOverride('AuthorizationType', AuthorizationType.CUSTOM);
         (resource as CfnResource).addPropertyOverride('AuthorizerId', { Ref: restAPIAuthorizer.logicalId });
 
-        // TODO: DNS -> ALB -> CDN -> APIGW -> Lambda auth -> Lambda api
         const apiDomain = new DomainName(this, 'ServerlessAPIDomain', {
             certificate: certificate,
             domainName: recordSetName,
@@ -335,7 +211,20 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         apiDomain.addBasePathMapping(restAPI, {
             basePath: infrastructureConfig.cdnApiBasePath
         });
-        // TODO: add bath for /app
+        // TODO: add base path for /app
+
+        const recordSet = new CfnRecordSet(this, 'RecordSet', {
+            name: recordSetName,
+            type: 'A',
+            hostedZoneId: hostedZoneId,
+            aliasTarget: {
+                dnsName: apiDomain.domainNameAliasDomainName,
+                hostedZoneId: apiDomain.domainNameAliasHostedZoneId,
+                evaluateTargetHealth: false
+            },
+            setIdentifier: `${region}-record`,
+            weight: region === infrastructureConfig.regions.primary ? +primaryRegionTrafficWeight : +secondaryRegionTrafficWeight
+        });
 
 
         // TODO: consider if this (or at least route 53 config) belongs in dr infrastructure stack

@@ -119,7 +119,7 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
                             ],
                             resources: [
                                 `arn:aws:lambda:${infrastructureConfig.regions.primary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${infrastructureConfig.regions.primary}`,
-                                `arn:aws:lambda:${infrastructureConfig.regions.secondary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${infrastructureConfig.regions.primary}`
+                                `arn:aws:lambda:${infrastructureConfig.regions.secondary}:${this.account}:function:${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${infrastructureConfig.regions.secondary}`
                             ]
                         }),
                         new PolicyStatement({
