@@ -17,20 +17,23 @@
 ## How to Use
 Knowledge of and prior configuration of the AWS CDK is assumed.  See below for useful commands.  Otherwise, the following provides for a few useful scenarios:
 
-* `cdk deploy --all` deploys the app without environment variables but expects that the `appId` parameter be configured in the application's configuration file (see InfrastructureConfig.ts); if not configured, then a detailed exception notifies of this pre-requisite.
-* `APP_ID={appid} cdk deploy --all` deploys the application and all the stacks configured (see serverless-cdk.ts), in the appropriate sequence.  This sets the `APP_ID` environment variable, resolving the `appId` required value.
-* `APP_ID={appid} INCLUDE_REPLICATION={yes|true} cdk deploy --all` deploys the app with the `APP_ID` environment variables and the `INCLUDE_REPLICATION` option with a truthy value (yes/true, non-case sensitive); setting this option ensures that the S3 content buckets receive the configuration of S3 Replication rules appropriately cross-region.
-* `APP_ID={appid} INCLUDE_REPLICATION={yes|true} DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} cdk deploy --all` deploys same as above and includes additional required options to configure Route 53 weighted record sets into an existing hosting zone using the hosting zone's unique id and the desired name for the weighted record set (e.g. 'subdomain.domain.net'), as well as the SSL/TLS certificate's domain name (e.g. '*.domain.net').  NOTE: this assumes an existing hosting zone and ACM certificate, configuration of which is outside the scope of this project.
+* `APP_ID={appid} INCLUDE_REPLICATION=no DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} cdk deploy --all` deploys the application using the `APP_ID` value as unique identifier for the resources, including additional required options to configure Route 53 weighted record sets into an existing hosting zone using the hosting zone's unique id and the desired name for the weighted record set (e.g. 'subdomain.domain.net'), as well as the SSL/TLS certificate's domain name (e.g. '*.domain.net').  NOTE: this assumes an existing hosting zone and ACM certificate, configuration of which are outside the scope of this project.  Note also that the S3 Buckets do not receive S3 Replication initially.
 
-NOTE: It is important to note that in order to deploy the S3 Replication rules across regions/stacks, a basic deployment must first be completed WITHOUT the rules, followed by the same deployment -- same stack(s) -- but with the replication options in place.  To accomplish this, deploy the app without, then with the `INCLUDE_REPLICATION` environment variable set.
+* `APP_ID={appid} INCLUDE_REPLICATION=yes DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} cdk deploy --all` performs a second deployment with the same options but enables S3 Replication.
+
+NOTE: It is important to note that in order to deploy the S3 Replication rules across regions/stacks, a basic deployment must first be completed WITHOUT the rules, followed by the same deployment -- same stack(s) -- but with the replication options in place.  To accomplish this, deploy the app without, then with the `INCLUDE_REPLICATION` environment variable set, as documented above.
+
+* `APP_ID={appid} INCLUDE_REPLICATION=yes DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} PRIMARY_WEIGHT=0 SECONDARY_WEIGHT=100 cdk deploy --all` performs a failover of the Route 53 Weighted Record Sets to force routing to the secondary region/resources.
 
 NOTE: Replace the tokens in the example accordingly; these are defined below:
 
-- `{appid}` is a unique identifier for the CDK application and is used throughout the project to ensure uniqueness in certain cases; for instance in the naming of the S3 Buckets where global uniqueness is required.  While the length constraints for this value actually depend on the specific resource that uses the appId, a short value (1-10 characters) is recommended.
-- `INCLUDE_REPLICATION={yes|true}` provides the optional configuration of S3 Replication rules, used by conditional logic in the appropriate stack.
-- `DNS_RECORD_SET` TODO: define
-- `HOSTED_ZONE` TODO: define
-- `CERTIFICATE_DOMAIN_NAME` TODO: define
+- `APP_ID` is a unique identifier for the CDK application and is used throughout the project to ensure uniqueness in certain cases; for instance in the naming of the S3 Buckets where global uniqueness is required.  While the length constraints for this value actually depend on the specific resource that uses the appId, a short value (1-10 characters) is recommended; this field is required
+- `INCLUDE_REPLICATION={yes|true|no|false}` provides the optional configuration of S3 Replication rules, used by conditional logic in the appropriate stack.  If truthy (yes|true), configures S3 Buckets with S3 Replication settings enabled.  If falsy (no|false) or if not set (default), configures S3 Buckets without S3 Replication.  Note that once replication is enabled by setting this value to truthy, it would be disabled by additional deployments that pass a falsy value.  This may be the intended behavior, but the more likely scenario is (1) on initial deployment pass falsy to allow the S3 Buckets to be created and (2) via a second (and all subsequent) deployment(s), pass a truthy value.
+- `HOSTED_ZONE` domain name of the pre-configured Route 53 Record Hosted Zone into which to create the Record Sets; this field is required
+- `DNS_RECORD_SET` sub-domain name of the desired Route 53 multi-region, weighted Record Sets; also serves as the name of the API Gateway Custom Domain; this field is required
+- `CERTIFICATE_DOMAIN_NAME` Domain name of the ACM certificate that corresponds with the Hosted Zone; this field is required
+- `PRIMARY_WEIGHT` value of the primary Route 53 Record Set; default is 100
+- `SECONDARY_WEIGHT` value of the secondary Route 53 Record Set; default is 0
 
 The `cdk.json` file tells the CDK Toolkit how to execute the app.
 
