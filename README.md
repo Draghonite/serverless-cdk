@@ -25,10 +25,13 @@ NOTE: It is important to note that in order to deploy the S3 Replication rules a
 
 * `APP_ID={appid} INCLUDE_REPLICATION=yes DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} PRIMARY_WEIGHT=0 SECONDARY_WEIGHT=100 cdk deploy --all` performs a failover of the Route 53 Weighted Record Sets to force routing to the secondary region/resources.
 
+* `APP_ID={appid} INCLUDE_REPLICATION=yes DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} cdk destroy --all` deletes the deployed stacks, effectively decommissioning the resources.  It may be necessary to revisit the cloud account to ensure all resources have been removed to eliminate additional charges.
+
+
 NOTE: Replace the tokens in the example accordingly; these are defined below:
 
 - `APP_ID` is a unique identifier for the CDK application and is used throughout the project to ensure uniqueness in certain cases; for instance in the naming of the S3 Buckets where global uniqueness is required.  While the length constraints for this value actually depend on the specific resource that uses the appId, a short value (1-10 characters) is recommended; this field is required
-- `INCLUDE_REPLICATION={yes|true|no|false}` provides the optional configuration of S3 Replication rules, used by conditional logic in the appropriate stack.  If truthy (yes|true), configures S3 Buckets with S3 Replication settings enabled.  If falsy (no|false) or if not set (default), configures S3 Buckets without S3 Replication.  Note that once replication is enabled by setting this value to truthy, it would be disabled by additional deployments that pass a falsy value.  This may be the intended behavior, but the more likely scenario is (1) on initial deployment pass falsy to allow the S3 Buckets to be created and (2) via a second (and all subsequent) deployment(s), pass a truthy value.
+- `INCLUDE_REPLICATION={yes|true|no|false}` provides the optional configuration of S3 Replication rules, used by conditional logic in the appropriate stack.  If truthy (yes|true), configures S3 Buckets with S3 Replication settings enabled.  If falsy (no|false) or if not set (default), configures S3 Buckets without S3 Replication.  Note that once replication is enabled by setting this value to truthy, it would be disabled by additional deployments that pass a falsy value.  This may be the intended behavior, but the more likely scenario is (1) on initial deployment pass falsy to allow the S3 Buckets to be created and (2) via a second (and all subsequent) deployment(s), pass a truthy value; this field is optional
 - `HOSTED_ZONE` domain name of the pre-configured Route 53 Record Hosted Zone into which to create the Record Sets; this field is required
 - `DNS_RECORD_SET` sub-domain name of the desired Route 53 multi-region, weighted Record Sets; also serves as the name of the API Gateway Custom Domain; this field is required
 - `CERTIFICATE_DOMAIN_NAME` Domain name of the ACM certificate that corresponds with the Hosted Zone; this field is required
@@ -37,7 +40,7 @@ NOTE: Replace the tokens in the example accordingly; these are defined below:
 
 The `cdk.json` file tells the CDK Toolkit how to execute the app.
 
-## Useful commands
+## Basic commands
 
 * `npm run build`   compile typescript to js
 * `npm run watch`   watch for changes and compile
