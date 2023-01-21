@@ -3,8 +3,14 @@
 
 - AWS CDK
 - TypeScript
-- Managing of CloudFormation automation code for stacks involving:
-  - Infrastructure (including provisioning of TODO);
+- Managing of CloudFormation automation code for provisioning of Amazon AWS resources including:
+  - Route 53 Weighted RecordSets
+  - API Gateway REST services
+  - API Gateway Custom Domains
+  - Lambda functions
+  - API Gateway Custom Authorizers
+  - S3 Buckets
+  - Aurora 
 
 ![Architecture Diagram](architecture.png)
 
