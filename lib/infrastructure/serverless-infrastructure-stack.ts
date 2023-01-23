@@ -27,6 +27,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         const region = props?.env?.region;
         const recordSetName = scope.node.tryGetContext('recordSetName');
         const hostedZoneId = scope.node.tryGetContext('hostedZoneId');
+        const hostedZone = HostedZone.fromHostedZoneId(this, 'HostedZoneLookup', hostedZoneId);
         const primaryRegionTrafficWeight = scope.node.tryGetContext('primaryRegionTrafficWeight');
         const secondaryRegionTrafficWeight = scope.node.tryGetContext('secondaryRegionTrafficWeight');
         const certificateDomainName = scope.node.tryGetContext('certificateDomainName');
@@ -36,13 +37,14 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             alias: infrastructureConfig.kmsAlias
         });
         Tags.of(kmsKey).add(TagEnum.APPLICATION_ID, appId);
-
-        const hostedZone = HostedZone.fromHostedZoneId(this, 'HostedZoneLookup', hostedZoneId);
+        Tags.of(kmsKey).add(TagEnum.NAME, `${infrastructureConfig.kmsAlias}-${appId}-${region}-kms`);
 
         const certificate = new Certificate(this, 'ServerlessCertificate', {
             domainName: certificateDomainName,
             validation: CertificateValidation.fromDns(hostedZone)
         });
+        Tags.of(certificate).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(certificate).add(TagEnum.NAME, `${certificateDomainName}-${appId}-${region}-cert`);
 
         // NOTE: the subnets are created but not associated to the vpc via the vpc's route table -- actually, each subnet gets its own route table?!
         // ...this an issue at all?!  see if missing subnet group is the reason
@@ -100,7 +102,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         // TODO: grant the permissions to the bucket(s) through the lambda's execution role instead -- so 'appBucket' isn't required
         // appBucket.grantReadWrite(lambdaApp);
 
-        // TODO: properly secure -- specific ports
         const lambdaApiSecurityGroup = new SecurityGroup(this, 'LambdaApiSG', {
             vpc: vpc,
             allowAllOutbound: true
@@ -132,8 +133,9 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             },
             role: appExecutionRole
         });
+        Tags.of(lambdaApi).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(lambdaApi).add(TagEnum.NAME, `${infrastructureConfig.apiLambdaName}-${appId}-${region}-lambda`);
 
-        // TODO: properly secure -- specific ports
         const lambdaApiAuthorizerSecurityGroup = new SecurityGroup(this, 'LambdaApiAuthorizerSG', {
             vpc: vpc,
             allowAllOutbound: true
@@ -163,6 +165,8 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             },
             role: appExecutionRole
         });
+        Tags.of(lambdaApiAuthorizer).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(lambdaApiAuthorizer).add(TagEnum.NAME, `${infrastructureConfig.apiAuthorizerLambdaName}-${appId}-${region}-lambda-auth`);
 
         // TODO: much more to configure to allow {proxy+} integration and OPTIONS under a hierarchy
         // e.g. /v1/{proxy+}/ANY|OPTIONS where ANY and OPTIONS are separate methods 3-level deep
@@ -182,6 +186,8 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
                 ]
             })
         });
+        Tags.of(restAPI).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(restAPI).add(TagEnum.NAME, `${infrastructureConfig.restApiName}-${appId}-${region}-apigw-api`);
 
         const restAPIAuthorizer = new CfnAuthorizer(this, 'ServerlessAPIAuthorizer', {
             name: `${infrastructureConfig.apiAuthorizerName}-${appId}-${region}`,
@@ -193,6 +199,8 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             authorizerResultTtlInSeconds: infrastructureConfig.apiAuthorizerTTL,
             authorizerCredentials: `arn:aws:iam::${this.account}:role/service-role/${infrastructureConfig.apiAuthorizerRoleName}-${appId}`
         });
+        Tags.of(restAPIAuthorizer).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(restAPIAuthorizer).add(TagEnum.NAME, `${infrastructureConfig.apiAuthorizerName}-${appId}-${region}-apigw-auth`);
 
         const restAPIAuthorizerGetMethod = restAPI.root.addMethod('GET', new apigateway.LambdaIntegration(lambdaApi, {
             requestTemplates: { 'application/json': '{ "statusCode": "200" }' }
@@ -213,6 +221,8 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             basePath: infrastructureConfig.cdnApiBasePath
         });
         // TODO: add base path for /app
+        Tags.of(apiDomain).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(apiDomain).add(TagEnum.NAME, `${recordSetName}-${appId}-${region}-apigw-cdn`);
 
         const recordSet = new CfnRecordSet(this, 'RecordSet', {
             name: recordSetName,
@@ -226,12 +236,12 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             setIdentifier: `${region}-record`,
             weight: region === infrastructureConfig.regions.primary ? +primaryRegionTrafficWeight : +secondaryRegionTrafficWeight
         });
+        Tags.of(recordSet).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(recordSet).add(TagEnum.NAME, `${recordSetName}-${appId}-${region}-rs`);
 
 
         // TODO: consider if this (or at least route 53 config) belongs in dr infrastructure stack
         // see https://sbstjn.com/blog/aws-cdk-lambda-loadbalancer-vpc-certificate/
-        // TODO: create the approriate associations to Route 53 and an ALB/ELB to ensure redundancy and failover (optionally using health-checks in the application's route 53 config)
-        // TODO: output the appropriate access point for the application: http(s) URL
 
         // TODO: create a db subnet group using the rds subnet -- question: will 2 AZs be required for multi-region/replication to work?!
         // ...not including the 2 planned above where 1 AZ is for Blue, 1 for Green -- these would not provide high availability
@@ -268,7 +278,11 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         //     }
         // });
 
-        // TODO: optional - add consistent tags to the resources to include the app name and appid -- "appname: serverless"
         // TODO: ensure traceability through x-ray; ideally make tracing optional (configurable, all-or-nothing)
+
+        new CfnOutput(this, 'ServerlessAppURL', {
+            exportName: 'ApplicationEntryPoint',
+            value: `https://${apiDomain.domainName}/api/`
+        });
     }
 }
