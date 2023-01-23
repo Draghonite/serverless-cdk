@@ -61,6 +61,35 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
 
         // #endregion
 
+        // #region Access Logging Role
+
+        new Role(this, 'AccessLoggingRole', {
+            assumedBy: new ServicePrincipal('s3.amazonaws.com'),
+            path: '/service-role/',
+            roleName: `${infrastructureConfig.accessLoggingRoleName}-${appId}`,
+            managedPolicies: [
+                new ManagedPolicy(this, 'AccessLoggingRoleManagedPolicy', {
+                    managedPolicyName: `AccessLoggingRoleManagedPolicy-${appId}`,
+                    statements: [
+                        new PolicyStatement({
+                            effect: Effect.ALLOW,
+                            actions: [
+                                's3:PutBucket'
+                            ],
+                            resources: [
+                                `arn:aws:s3:::${infrastructureConfig.accessLogsBucketName}-${appId}-${infrastructureConfig.regions.primary}`,
+                                `arn:aws:s3:::${infrastructureConfig.accessLogsBucketName}-${appId}-${infrastructureConfig.regions.primary}/*`,
+                                `arn:aws:s3:::${infrastructureConfig.accessLogsBucketName}-${appId}-${infrastructureConfig.regions.secondary}`,
+                                `arn:aws:s3:::${infrastructureConfig.accessLogsBucketName}-${appId}-${infrastructureConfig.regions.secondary}/*`,
+                            ]
+                        })
+                    ]
+                })
+            ]
+        });
+
+        // #endregion
+
         // #region App Execution Role
 
         new Role(this, 'ServerlessAppExecutionRole', {

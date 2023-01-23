@@ -1,7 +1,7 @@
 export const InfrastructureConfig = {
     appId: '',
     appName: 'serverless',
-    isInternal: false, // TODO: consider making internal/private app
+    isInternal: true, // TODO: consider making internal/private app
     vpcName: 'serverless-vpc',
     vpcCIDR: '10.0.0.0/24',
     vpcIdOutput: 'ServerlessVPCId',
@@ -27,7 +27,7 @@ export const InfrastructureConfig = {
     apiAuthorizerTTL: 5, // TODO: increase to default (300) or appropriate
     apiAuthorizerLambdaName: 'serverless-api-authorizer',
     apiAuthorizerRoleName: 'serverless_api_authorizer_role',
-    apiExecuteApiEndpointDisabled: false, // TODO: consider disabling (true) if not needed once exposed via ALB/CDN; can also make configurable
+    apiExecuteApiEndpointDisabled: true, // TODO: consider disabling (true) if not needed once exposed via ALB/CDN; can also make configurable
     appLambdaSubnetGroupName: 'PrivateSubnetLambda',
     lambdaCustomHandlerName: 'serverless-app-lambda-provider',
     // lambdaCustomHandlerArnOutput: 'CustomLambdaReplicationHandlerArnOutput',
@@ -47,11 +47,14 @@ export const InfrastructureConfig = {
     primaryRegionTrafficWeight: 100,
     secondaryRegionTrafficWeight: 0,
     loadBalancerName: 'serverless-alb',
-    accessLogsBucketname: 'serverless-access-logs',
+    accessLogsBucketName: 'serverless-access-logs',
+    accessLoggingRoleName: 'serverless_app_access_logging_role',
     targetGroupName: 'serverless-tg',
-    // TODO: parameterize or more securely store as a secret, but DO NOT use as-is (esp. production)
+    // NOTE: should be parameterize or more securely store as a secret, but DO NOT use as-is (esp. production)
     jwtTokenSecret: 'qwertyuiopasdfghjklzxcvbnm123456',
-    xrayTracingEnabled: true
+    xrayTracingEnabled: true,
+    // NOTE: when set to true, adds capabilities useful for rapid setup and teardown of resources
+    isDevTesting: true,
 }
 
 export enum TagEnum {

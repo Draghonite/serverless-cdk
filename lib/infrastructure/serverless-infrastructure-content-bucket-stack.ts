@@ -15,17 +15,19 @@ export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
         const appId: string = scope.node.tryGetContext('appId');
         const region = props?.env?.region;
         const destinationBucketRegion = (region !== infrastructureConfig.regions.primary) ? infrastructureConfig.regions.primary : infrastructureConfig.regions.secondary;
-        
+        const kmsEncryptionKey = Alias.fromAliasName(this, 'ServerlessAppS3KMSLookup', infrastructureConfig.kmsAlias);
+
+        // #region Content Bucket
+
         const contentBucket = new Bucket(this, 'ServerlessAppContentBucket', {
             bucketName: `${infrastructureConfig.contentBucketName}-${appId}-${region}`,
             versioned: true,
             blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
             encryption: BucketEncryption.KMS,
-            encryptionKey: Alias.fromAliasName(this, 'ServerlessAppS3KMSLookup', infrastructureConfig.kmsAlias),
+            encryptionKey: kmsEncryptionKey,
             bucketKeyEnabled: true,
-            // NOTE: following properties not for real-world use in most cases -- only to facilitate build-teardown/testing scenarios
-            autoDeleteObjects: true,
-            removalPolicy: RemovalPolicy.DESTROY
+            autoDeleteObjects: infrastructureConfig.isDevTesting,
+            removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN
         });
         contentBucket.addToResourcePolicy(new PolicyStatement({
             effect: Effect.ALLOW,
@@ -69,5 +71,34 @@ export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
                 ]
             };
         }
+
+        // #endregion
+
+        // #region Access Log Bucket
+
+        const accessLogBucket = new Bucket(this, 'ServerAppAccessLogBucket', {
+            bucketName: `${infrastructureConfig.accessLogsBucketName}-${appId}-${region}`,
+            versioned: false,
+            blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+            encryption: BucketEncryption.KMS,
+            encryptionKey: kmsEncryptionKey,
+            bucketKeyEnabled: true,
+            autoDeleteObjects: infrastructureConfig.isDevTesting,
+            removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN
+        });
+        // contentBucket.addToResourcePolicy(new PolicyStatement({
+        //     effect: Effect.ALLOW,
+        //     principals: [
+        //         new ArnPrincipal(Fn.sub(`arn:aws:iam::\${AWS::AccountId}:role/service-role/${infrastructureConfig.accessLoggingRoleName}-${appId}`))
+        //     ],
+        //     actions: [
+        //         "s3:PutObject"
+        //     ],
+        //     resources: [
+        //         `arn:aws:s3:::${infrastructureConfig.accessLogsBucketName}-${appId}-${region}/*`
+        //     ]
+        // }));
+
+        // #endregion
     }
 }

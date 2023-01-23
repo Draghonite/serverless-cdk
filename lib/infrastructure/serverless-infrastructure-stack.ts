@@ -30,6 +30,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         const primaryRegionTrafficWeight = scope.node.tryGetContext('primaryRegionTrafficWeight');
         const secondaryRegionTrafficWeight = scope.node.tryGetContext('secondaryRegionTrafficWeight');
         const certificateDomainName = scope.node.tryGetContext('certificateDomainName');
+        const appExecutionRole = Role.fromRoleArn(this, 'ServerlessAppExecutionRoleLookup', `arn:aws:iam::${this.account}:role/service-role/${infrastructureConfig.appExecutionRoleName}-${appId}`, { mutable: false });
 
         const kmsKey = new Key(this, 'ServerlessAppS3KMS', {
             alias: infrastructureConfig.kmsAlias
@@ -48,8 +49,8 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         const vpc = new Vpc(this, 'ServerlessVPC', {
             vpcName: infrastructureConfig.vpcName,
             cidr: infrastructureConfig.vpcCIDR,
-            // natGateways: 0,
-            // vpnGateway: false,
+            // natGateways: infrastructureConfig.isInternal ? 0 : 1,
+            // vpnGateway: !infrastructureConfig.isInternal,
             maxAzs: 2,
             // subnetConfiguration: [
             //     {
@@ -129,8 +130,7 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
                 BUCKET: `${infrastructureConfig.contentBucketName}-${appId}-${region}`,
                 // TODO: configure endpoint for the database
             },
-            // TODO: apply a custom role; errors: The policy ServerlessAppExecutionRoleLookupPolicyA389FE16 already exists on the role serverless_app_execution_role-appid.
-            // role: Role.fromRoleArn(this, 'ServerlessAppExecutionRoleLookup', `arn:aws:iam::${this.account}:role/service-role/${infrastructureConfig.appExecutionRoleName}-${appId}`)
+            role: appExecutionRole
         });
 
         // TODO: properly secure -- specific ports
@@ -160,7 +160,8 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
                 JWT_SECRET: infrastructureConfig.jwtTokenSecret,
                 LAMBDA_API_ARN: lambdaApi.functionArn,
                 S3_CONTENT_ARN: `arn:aws:s3:::${infrastructureConfig.contentBucketName}-${appId}-${region}`
-            }
+            },
+            role: appExecutionRole
         });
 
         // TODO: much more to configure to allow {proxy+} integration and OPTIONS under a hierarchy
