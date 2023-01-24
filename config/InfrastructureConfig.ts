@@ -5,9 +5,9 @@ export const InfrastructureConfig = {
     vpcName: 'serverless-vpc',
     vpcCIDR: '10.0.0.0/24',
     vpcIdOutput: 'ServerlessVPCId',
-    // vpcSubnetGroupNames: [
-    //     'PrivateSubnetLambda','PrivateSubnetRDS'
-    // ],
+    vpcSubnetGroupNames: [
+        'PrivateSubnetLambda','PrivateSubnetRDS'
+    ],
     vpcEndpointName: 'serverless-vpc-endpoint',
     kmsAlias: 'alias/serverlessappkey',
     restApiName: 'Serverless API',

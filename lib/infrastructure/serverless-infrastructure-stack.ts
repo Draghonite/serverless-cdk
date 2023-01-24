@@ -46,29 +46,23 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         Tags.of(certificate).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(certificate).add(TagEnum.NAME, `${certificateDomainName}-${appId}-${region}-cert`);
 
-        // NOTE: the subnets are created but not associated to the vpc via the vpc's route table -- actually, each subnet gets its own route table?!
-        // ...this an issue at all?!  see if missing subnet group is the reason
         const vpc = new Vpc(this, 'ServerlessVPC', {
             vpcName: infrastructureConfig.vpcName,
             cidr: infrastructureConfig.vpcCIDR,
-            // natGateways: infrastructureConfig.isInternal ? 0 : 1,
-            // vpnGateway: !infrastructureConfig.isInternal,
             maxAzs: 2,
-            // subnetConfiguration: [
-            //     {
-            //         name: infrastructureConfig.vpcSubnetGroupNames[0],
-            //         subnetType: SubnetType.PRIVATE_ISOLATED
-            //     },
-            //     {
-            //         name: infrastructureConfig.vpcSubnetGroupNames[1],
-            //         subnetType: SubnetType.PRIVATE_ISOLATED
-            //     }
-            // ]
+            subnetConfiguration: [
+                {
+                    name: infrastructureConfig.vpcSubnetGroupNames[0],
+                    subnetType: SubnetType.PRIVATE_ISOLATED
+                },
+                {
+                    name: infrastructureConfig.vpcSubnetGroupNames[1],
+                    subnetType: SubnetType.PRIVATE_ISOLATED
+                }
+            ]
         });
         Tags.of(vpc).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(vpc).add(TagEnum.NAME, infrastructureConfig.vpcName);
-        
-        // TODO: configure security group(s) for the VPC to allow common protocols: 80, 443, 5432
 
         // TOOD: re-enable app bucket as needed
         // const appBucket = new Bucket(this, 'LambdaAppBucket', {
@@ -79,7 +73,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         //     encryptionKey: Alias.fromAliasName(this, 'ServerlessAppS3KMSLookup', infrastructureConfig.kmsAlias),
         //     bucketKeyEnabled: true
         // });
-        // TODO: configure bucket policies to ensure only the app execution role and the application's lambda function can access the bucket
 
         // TODO: ensure the lambda function has code for testing database connectivity -- use 'pg' node module and query against a standard sys database, or some other query
         // TODO: add a function for basic heart-beat check: access to db should suffice; return 200: OK
@@ -98,9 +91,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         //     //     subnetGroupName: infrastructureConfig.appLambdaSubnetGroupName
         //     // }
         // });
-
-        // TODO: grant the permissions to the bucket(s) through the lambda's execution role instead -- so 'appBucket' isn't required
-        // appBucket.grantReadWrite(lambdaApp);
 
         const lambdaApiSecurityGroup = new SecurityGroup(this, 'LambdaApiSG', {
             vpc: vpc,
@@ -121,9 +111,9 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             memorySize: 128,
             timeout: cdk.Duration.seconds(30),
             vpc: vpc,
-            // vpcSubnets: {
-            //     subnetGroupName: infrastructureConfig.vpcSubnetGroupNames[0]
-            // }
+            vpcSubnets: {
+                subnetGroupName: infrastructureConfig.vpcSubnetGroupNames[0]
+            },
             environmentEncryption: kmsKey,
             tracing: infrastructureConfig.xrayTracingEnabled ? Tracing.ACTIVE : Tracing.DISABLED,
             securityGroups: [lambdaApiSecurityGroup],
@@ -238,10 +228,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         });
         Tags.of(recordSet).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(recordSet).add(TagEnum.NAME, `${recordSetName}-${appId}-${region}-rs`);
-
-
-        // TODO: consider if this (or at least route 53 config) belongs in dr infrastructure stack
-        // see https://sbstjn.com/blog/aws-cdk-lambda-loadbalancer-vpc-certificate/
 
         // TODO: create a db subnet group using the rds subnet -- question: will 2 AZs be required for multi-region/replication to work?!
         // ...not including the 2 planned above where 1 AZ is for Blue, 1 for Green -- these would not provide high availability
