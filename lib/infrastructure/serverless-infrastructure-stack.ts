@@ -229,40 +229,55 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         Tags.of(recordSet).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(recordSet).add(TagEnum.NAME, `${recordSetName}-${appId}-${region}-rs`);
 
-        // TODO: create a db subnet group using the rds subnet -- question: will 2 AZs be required for multi-region/replication to work?!
-        // ...not including the 2 planned above where 1 AZ is for Blue, 1 for Green -- these would not provide high availability
-        // ...so would this solution require 3 AZs in each environment -- 12 total?!
-        // NOTE: may need to move this to another stack -- prerequisite: 2 regions, 2 AZs, 2 db subnet groups (1 in each region) -- must first exist
-        // const dbSubnetGroup = new SubnetGroup(this, 'ServerlessDbSubnetGroup', {
-        //     vpc: vpc,
-        //     subnetGroupName: infrastructureConfig.databaseSubnetGroupName,
-        //     description: infrastructureConfig.databaseSubnetGroupDescription,
-        //     vpcSubnets: {
-        //         // availabilityZones: ['us-west-1a'],
-        //         onePerAz: true,
-        //         // subnetFilters: '',
-        //         // subnetGroupName: infrastructureConfig.databaseSubnetGroupName,
-        //         // subnetType: SubnetType.PRIVATE_ISOLATED,
-        //         subnets: vpc.isolatedSubnets // TODO: filter and ensure only the 'PrivateSubnetRDSX' subnets are used
-        //     }
-        // });
+        const dbSubnetGroup = new SubnetGroup(this, 'ServerlessDbSubnetGroup', {
+            vpc: vpc,
+            subnetGroupName: infrastructureConfig.databaseSubnetGroupName,
+            description: infrastructureConfig.databaseSubnetGroupDescription,
+            vpcSubnets: {
+                onePerAz: true,
+                subnetGroupName: infrastructureConfig.vpcSubnetGroupNames[1]
+            },
+            removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN
+        });
 
-        // TODO: create a cost-effective Aurora Postgres RDS cluster on the dedicated private subnet of the new vpc
-        // TODO: should be compatible with Aurora Global Database -- see engine and instance size requirements
-        // NOTE: synth fails with: Error: There are no subnet groups with name 'serverless-db-subnet-group' in this VPC. Available names: PrivateSubnetLambda1,PrivateSubnetRDS1,PrivateSubnetRDS2
-        // const rdsCluster = new DatabaseCluster(this, 'ServerlessDbCluster', {
-        //     defaultDatabaseName: infrastructureConfig.databaseName,
-        //     engine: DatabaseClusterEngine.AURORA_POSTGRESQL,
-        //     parameterGroup: ParameterGroup.fromParameterGroupName(this, 'ParameterGroup', infrastructureConfig.databaseParameterGroupName),
-        //     instanceProps: {
-        //         instanceType: InstanceType.of(InstanceClass.BURSTABLE2, InstanceSize.MEDIUM),
-        //         vpc: vpc,
-        //         vpcSubnets: {
-        //             subnetGroupName: infrastructureConfig.databaseSubnetGroupName
-        //         },
-        //         publiclyAccessible: false
-        //     }
-        // });
+        // TODO: create a cost-effective Aurora Postgres RDS cluster on the dedicated private subnet of the new vpc, should be compatible with Aurora Global Database -- see engine and instance size requirements
+        const dbSecurityGroup = new SecurityGroup(this, 'RDSSG', {
+            vpc: vpc,
+            allowAllOutbound: true
+        });
+        dbSecurityGroup.applyRemovalPolicy(infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN);
+        dbSecurityGroup.addIngressRule(
+            // NOTE: for added security, can allow ONLY connections from the lambda security group
+            infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
+            Port.tcp(5432)
+        );
+        Tags.of(dbSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(dbSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.appName}-${appId}-${region}-rds-sg`);
+
+        // TODO: add to a global database
+        const rdsCluster = new DatabaseCluster(this, 'ServerlessDbCluster', {
+            defaultDatabaseName: infrastructureConfig.databaseName,
+            engine: DatabaseClusterEngine.AURORA_POSTGRESQL,
+            parameterGroup: ParameterGroup.fromParameterGroupName(this, 'ServerlessDbParameterGroup', infrastructureConfig.databaseParameterGroupName),
+            instanceProps: {
+                instanceType: InstanceType.of(InstanceClass.R5, InstanceSize.LARGE),
+                vpc: vpc,
+                vpcSubnets: {
+                    subnetGroupName: infrastructureConfig.vpcSubnetGroupNames[1]
+                },
+                publiclyAccessible: !infrastructureConfig.isInternal,
+                securityGroups: [dbSecurityGroup]
+            },
+            clusterIdentifier: infrastructureConfig.databaseClusterName,
+            removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN,
+            storageEncryptionKey: kmsKey,
+            iamAuthentication: true,
+            // TODO: create the database monitoring role so it's not created automatically -- replicate 'AWSServiceRoleForRDS' role
+            // monitoringRole: databaseMonitoringRole
+        });
+        Tags.of(rdsCluster).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(rdsCluster).add(TagEnum.NAME, `${infrastructureConfig.databaseName}-${appId}-${region}-db`);
+
 
         // TODO: ensure traceability through x-ray; ideally make tracing optional (configurable, all-or-nothing)
 
