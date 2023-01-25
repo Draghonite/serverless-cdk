@@ -40,6 +40,7 @@ export const InfrastructureConfig = {
     databaseSubnetGroupDescription: 'Database subnet group',
     databaseClusterName: 'severless-db-cluster',
     databaseName: 'serverless',
+    databaseUsername: 'postgres',
     regions: {
         primary: 'us-west-1',
         secondary: 'us-west-2'

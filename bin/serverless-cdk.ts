@@ -2,11 +2,11 @@
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { AppProps } from 'aws-cdk-lib';
-// import { ServerlessPostInfrastructureStack } from './../lib/infrastructure/serverless-post-infrastructure-stack';
 import { InfrastructureConfig } from './../config/InfrastructureConfig';
 import { ServerlessInfrastructureStack } from '../lib/infrastructure/serverless-infrastructure-stack';
 import { ServerlessPreInfrastructureStack } from '../lib/infrastructure/serverless-pre-infrastructure-stack';
 import { ServerlessInfrastructureContentBucketStack } from './../lib/infrastructure/serverless-infrastructure-content-bucket-stack';
+import { ServerlessPostInfrastructureStack } from '../lib/infrastructure/serverless-post-infrastructure-stack';
 
 const infrastructureConfig = InfrastructureConfig;
 
@@ -65,24 +65,15 @@ const secondaryRegionStack = new ServerlessInfrastructureStack(app, 'ServerlessI
     stackName: 'ServerlessInfrastructureStack'
 });
 
-// const postStack = new ServerlessPostInfrastructureStack(app, 'ServerlessPostInfrastructureStack', {
-//     env: {
-//         region: infrastructureConfig.regions.primary,
-//         // account: process.env.CDK_DEFAULT_ACCOUNT
-//     }
-// });
-
-// primaryRegionContentBucketStack.addDependency(preStack);
-// primaryRegionStack.addDependency(primaryRegionContentBucketStack);
-// secondaryRegionContentBucketStack.addDependency(primaryRegionStack);
-// secondaryRegionStack.addDependency(secondaryRegionContentBucketStack);
+const postStack = new ServerlessPostInfrastructureStack(app, 'ServerlessPostInfrastructureStack', {
+    env: { region: infrastructureConfig.regions.primary },
+    stackName: 'ServerlessPostInfrastructureStack'
+});
 
 primaryRegionStack.addDependency(preStack);
 secondaryRegionStack.addDependency(preStack);
 primaryRegionContentBucketStack.addDependency(primaryRegionStack);
 secondaryRegionStack.addDependency(primaryRegionContentBucketStack);
 secondaryRegionContentBucketStack.addDependency(secondaryRegionStack);
-
-// postStack.addDependency(preStack);
-// postStack.addDependency(primaryRegionStack);
-// postStack.addDependency(secondaryRegionStack);
+postStack.addDependency(primaryRegionStack);
+postStack.addDependency(secondaryRegionStack);

@@ -25,8 +25,7 @@ NOTE: It is important to note that in order to deploy the S3 Replication rules a
 
 * `APP_ID={appid} INCLUDE_REPLICATION=yes DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} PRIMARY_WEIGHT=0 SECONDARY_WEIGHT=100 cdk deploy --all` performs a failover of the Route 53 Weighted Record Sets to force routing to the secondary region/resources.
 
-* `APP_ID={appid} INCLUDE_REPLICATION=yes DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} cdk destroy --all` deletes the deployed stacks, effectively decommissioning the resources.  It may be necessary to revisit the cloud account to ensure all resources have been removed to eliminate additional charges.
-
+* `APP_ID={appid} INCLUDE_REPLICATION=yes DNS_RECORD_SET={recordName} HOSTED_ZONE_ID={zoneId} CERTIFICATE_DOMAIN_NAME={certName} cdk destroy --all` deletes the deployed stacks, effectively decommissioning the resources.  It may be necessary to revisit the cloud account to ensure all resources have been removed to eliminate additional charges; for this, delete any remaining CloudFormation stacks and/or manually decommission resources not deleted through automation due to protection rules or other dependencies, such as S3 Buckets, RDS databases and networking resources.
 
 NOTE: Replace the tokens in the example accordingly; these are defined below:
 
@@ -34,9 +33,9 @@ NOTE: Replace the tokens in the example accordingly; these are defined below:
 - `INCLUDE_REPLICATION={yes|true|no|false}` provides the optional configuration of S3 Replication rules, used by conditional logic in the appropriate stack.  If truthy (yes|true), configures S3 Buckets with S3 Replication settings enabled.  If falsy (no|false) or if not set (default), configures S3 Buckets without S3 Replication.  Note that once replication is enabled by setting this value to truthy, it would be disabled by additional deployments that pass a falsy value.  This may be the intended behavior, but the more likely scenario is (1) on initial deployment pass falsy to allow the S3 Buckets to be created and (2) via a second (and all subsequent) deployment(s), pass a truthy value; this field is optional
 - `HOSTED_ZONE` domain name of the pre-configured Route 53 Record Hosted Zone into which to create the Record Sets; this field is required
 - `DNS_RECORD_SET` sub-domain name of the desired Route 53 multi-region, weighted Record Sets; also serves as the name of the API Gateway Custom Domain; this field is required
-- `CERTIFICATE_DOMAIN_NAME` Domain name of the ACM certificate that corresponds with the Hosted Zone; this field is required
-- `PRIMARY_WEIGHT` value of the primary Route 53 Record Set; default is 100
-- `SECONDARY_WEIGHT` value of the secondary Route 53 Record Set; default is 0
+- `CERTIFICATE_DOMAIN_NAME` domain name of the ACM certificate that corresponds with the Hosted Zone; this field is required
+- `PRIMARY_WEIGHT` value of the primary Route 53 Record Set's weight, denoting the desired weighted routing strategy; default is 100
+- `SECONDARY_WEIGHT` value of the secondary Route 53 Record Set, intended as an inverse of the primary weight value in order to ensure an active-passive strategy; default is 0
 
 The `cdk.json` file tells the CDK Toolkit how to execute the app.
 
@@ -49,6 +48,8 @@ The `cdk.json` file tells the CDK Toolkit how to execute the app.
 * `cdk diff`        compare deployed stack with current state
 * `cdk synth`       emits the synthesized CloudFormation template
 * `cdk destroy`      destroys the CloudFormation stack(s); if multiple exist, can provide the name(s) comma-delimited or `--all`
+
+NOTE: The required fields must be used even for these basic commands; e.g. `{REQUIRED_PARAMS} cdk synth`
 
 ### Disclaimer 
 Use of this solution is for academic purposes only and neither this site nor contributors to this repository are liable for costs resulting from use of any automation code contained nor referenced within.  Use at your own discretion and ensure to understand the risks of provisioning cloud infrastructure and resources, especially through automation.  It is highly encouraged to have a solid understanding of the cloud service provider(s) used and the processes for identification of provisioned resources and related costs, as well as how to decommission resources to reduce and eliminate costs.
@@ -75,3 +76,4 @@ Use of this solution is for academic purposes only and neither this site nor con
 - https://aws.plainenglish.io/custom-dns-for-private-api-gateway-5940cb4889a8
 - https://aws.amazon.com/blogs/networking-and-content-delivery/starting-small-with-aws-global-accelerator/
 - https://repost.aws/questions/QUjISNyk6aTA6jZgZQwKWf4Q/how-to-connect-a-load-balancer-and-an-interface-vpc-endpoint-together-using-cdk
+- https://dev.to/wakeupmh/create-aurora-mysql-on-top-of-cdk-with-ts-3949

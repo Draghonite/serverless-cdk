@@ -16,6 +16,7 @@ import { ApplicationListenerRule, ApplicationLoadBalancer, ApplicationTargetGrou
 import { Tracing } from 'aws-cdk-lib/aws-lambda';
 import { AuthorizationType, CfnAuthorizer, DomainName, EndpointType, RequestAuthorizer } from 'aws-cdk-lib/aws-apigateway';
 import { AwsCustomResource, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
+import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 
 export class ServerlessInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -239,6 +240,8 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             },
             removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN
         });
+        Tags.of(dbSubnetGroup).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(dbSubnetGroup).add(TagEnum.NAME, `${infrastructureConfig.databaseSubnetGroupName}-${appId}-${region}`);
 
         // TODO: create a cost-effective Aurora Postgres RDS cluster on the dedicated private subnet of the new vpc, should be compatible with Aurora Global Database -- see engine and instance size requirements
         const dbSecurityGroup = new SecurityGroup(this, 'RDSSG', {
@@ -254,10 +257,25 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         Tags.of(dbSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(dbSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.appName}-${appId}-${region}-rds-sg`);
 
-        // TODO: add to a global database
+        const dbCredentialSecrets = new Secret(this, 'ServerlessDbSecrets', {
+            secretName: `${infrastructureConfig.databaseClusterName}-credentials`,
+            generateSecretString: {
+                secretStringTemplate: JSON.stringify({
+                    username: infrastructureConfig.databaseName
+                }),
+                excludePunctuation: true,
+                includeSpace: false,
+                generateStringKey: 'password'
+            }
+        });
+        Tags.of(dbCredentialSecrets).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(dbCredentialSecrets).add(TagEnum.NAME, `${infrastructureConfig.databaseClusterName}-${appId}-${region}-credentials`);
+
+        const dbEngine = DatabaseClusterEngine.auroraPostgres({ version: AuroraPostgresEngineVersion.VER_13_7 });
+
         const rdsCluster = new DatabaseCluster(this, 'ServerlessDbCluster', {
             defaultDatabaseName: infrastructureConfig.databaseName,
-            engine: DatabaseClusterEngine.AURORA_POSTGRESQL,
+            engine: dbEngine,
             parameterGroup: ParameterGroup.fromParameterGroupName(this, 'ServerlessDbParameterGroup', infrastructureConfig.databaseParameterGroupName),
             instanceProps: {
                 instanceType: InstanceType.of(InstanceClass.R5, InstanceSize.LARGE),
@@ -271,7 +289,11 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             clusterIdentifier: infrastructureConfig.databaseClusterName,
             removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN,
             storageEncryptionKey: kmsKey,
-            iamAuthentication: true,
+            credentials: {
+                username: infrastructureConfig.databaseUsername,
+                password: dbCredentialSecrets.secretValueFromJson('password')
+            },
+            subnetGroup: dbSubnetGroup
             // TODO: create the database monitoring role so it's not created automatically -- replicate 'AWSServiceRoleForRDS' role
             // monitoringRole: databaseMonitoringRole
         });
