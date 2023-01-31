@@ -1,7 +1,12 @@
-import { InfrastructureConfig } from '../../config/InfrastructureConfig';
+import { InfrastructureConfig, TagEnum } from '../../config/InfrastructureConfig';
 import * as cdk from 'aws-cdk-lib';
+import * as rds from 'aws-cdk-lib/aws-rds';
 import { Construct } from 'constructs';
 import { Effect, ManagedPolicy, PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
+import { AuroraPostgresEngineVersion, CfnGlobalCluster, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, SubnetGroup } from 'aws-cdk-lib/aws-rds';
+import { RemovalPolicy, Tags } from 'aws-cdk-lib';
+import { InstanceClass, InstanceSize, InstanceType, Peer, Port, SecurityGroup } from 'aws-cdk-lib/aws-ec2';
+import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 
 export class ServerlessPreInfrastructureStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -163,6 +168,22 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
                 })
             ]
         });
+
+        // #endregion
+
+        // #region Global RDS Cluster
+
+        const dbEngine = DatabaseClusterEngine.auroraPostgres({ version: AuroraPostgresEngineVersion.VER_13_7 });
+
+        const rdsGlobalCluster = new CfnGlobalCluster(this, 'ServerlessDbGlobalCluster', {
+            deletionProtection: !infrastructureConfig.isDevTesting,
+            engine: dbEngine.engineType,
+            engineVersion: dbEngine.engineVersion?.fullVersion,
+            globalClusterIdentifier: `${infrastructureConfig.globalDatabaseClusterName}-${appId}`,
+            storageEncrypted: true,
+        });
+        Tags.of(rdsGlobalCluster).add(TagEnum.APPLICATION_ID, appId);
+        Tags.of(rdsGlobalCluster).add(TagEnum.NAME, `${infrastructureConfig.globalDatabaseClusterName}-${appId}-db-global`);
 
         // #endregion
     }

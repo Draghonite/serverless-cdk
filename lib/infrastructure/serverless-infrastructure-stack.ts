@@ -6,7 +6,7 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import { Construct } from 'constructs';
 import { InstanceClass, InstanceSize, InstanceType, InterfaceVpcEndpoint, Peer, Port, SecurityGroup, SubnetType, Vpc } from 'aws-cdk-lib/aws-ec2';
 import { BlockPublicAccess, Bucket, BucketEncryption, CfnBucket } from 'aws-cdk-lib/aws-s3';
-import { AuroraEngineVersion, AuroraPostgresEngineVersion, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, PostgresEngineVersion, SubnetGroup } from 'aws-cdk-lib/aws-rds';
+import { AuroraEngineVersion, AuroraPostgresEngineVersion, CfnDBCluster, DatabaseCluster, DatabaseClusterEngine, ParameterGroup, PostgresEngineVersion, SubnetGroup } from 'aws-cdk-lib/aws-rds';
 import { EngineVersion } from 'aws-cdk-lib/aws-opensearchservice';
 import { CfnOutput, CfnResource, Fn, RemovalPolicy, Tags } from 'aws-cdk-lib';
 import { PolicyStatement, Role, ServicePrincipal, Effect, IPrincipal, AnyPrincipal, PolicyDocument } from 'aws-cdk-lib/aws-iam';
@@ -175,7 +175,8 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
                         principals: [ new AnyPrincipal() ]
                     })
                 ]
-            })
+            }),
+            cloudWatchRole: true // TODO: how to configure 'CloudWatch log role ARN' directly -- should be the same as the app execution role
         });
         Tags.of(restAPI).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(restAPI).add(TagEnum.NAME, `${infrastructureConfig.restApiName}-${appId}-${region}-apigw-api`);
@@ -228,7 +229,6 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
             weight: region === infrastructureConfig.regions.primary ? +primaryRegionTrafficWeight : +secondaryRegionTrafficWeight
         });
         Tags.of(recordSet).add(TagEnum.APPLICATION_ID, appId);
-        Tags.of(recordSet).add(TagEnum.NAME, `${recordSetName}-${appId}-${region}-rs`);
 
         const dbSubnetGroup = new SubnetGroup(this, 'ServerlessDbSubnetGroup', {
             vpc: vpc,
@@ -243,63 +243,71 @@ export class ServerlessInfrastructureStack extends cdk.Stack {
         Tags.of(dbSubnetGroup).add(TagEnum.APPLICATION_ID, appId);
         Tags.of(dbSubnetGroup).add(TagEnum.NAME, `${infrastructureConfig.databaseSubnetGroupName}-${appId}-${region}`);
 
-        // TODO: create a cost-effective Aurora Postgres RDS cluster on the dedicated private subnet of the new vpc, should be compatible with Aurora Global Database -- see engine and instance size requirements
-        const dbSecurityGroup = new SecurityGroup(this, 'RDSSG', {
-            vpc: vpc,
-            allowAllOutbound: true
-        });
-        dbSecurityGroup.applyRemovalPolicy(infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN);
-        dbSecurityGroup.addIngressRule(
-            // NOTE: for added security, can allow ONLY connections from the lambda security group
-            infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
-            Port.tcp(5432)
-        );
-        Tags.of(dbSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
-        Tags.of(dbSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.appName}-${appId}-${region}-rds-sg`);
+        // #region RDS
 
-        const dbCredentialSecrets = new Secret(this, 'ServerlessDbSecrets', {
-            secretName: `${infrastructureConfig.databaseClusterName}-credentials`,
-            generateSecretString: {
-                secretStringTemplate: JSON.stringify({
-                    username: infrastructureConfig.databaseName
-                }),
-                excludePunctuation: true,
-                includeSpace: false,
-                generateStringKey: 'password'
-            }
-        });
-        Tags.of(dbCredentialSecrets).add(TagEnum.APPLICATION_ID, appId);
-        Tags.of(dbCredentialSecrets).add(TagEnum.NAME, `${infrastructureConfig.databaseClusterName}-${appId}-${region}-credentials`);
-
-        const dbEngine = DatabaseClusterEngine.auroraPostgres({ version: AuroraPostgresEngineVersion.VER_13_7 });
-
-        const rdsCluster = new DatabaseCluster(this, 'ServerlessDbCluster', {
-            defaultDatabaseName: infrastructureConfig.databaseName,
-            engine: dbEngine,
-            parameterGroup: ParameterGroup.fromParameterGroupName(this, 'ServerlessDbParameterGroup', infrastructureConfig.databaseParameterGroupName),
-            instanceProps: {
-                instanceType: InstanceType.of(InstanceClass.R5, InstanceSize.LARGE),
+        // NOTE: only deploying primary cluster -- need a different approach for multi-region read replica, keeps faling w/ known 'username' issue
+        if (region === infrastructureConfig.regions.primary) {
+            const dbSecurityGroup = new SecurityGroup(this, 'RDSSG', {
                 vpc: vpc,
-                vpcSubnets: {
-                    subnetGroupName: infrastructureConfig.vpcSubnetGroupNames[1]
-                },
-                publiclyAccessible: !infrastructureConfig.isInternal,
-                securityGroups: [dbSecurityGroup]
-            },
-            clusterIdentifier: infrastructureConfig.databaseClusterName,
-            removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN,
-            storageEncryptionKey: kmsKey,
-            credentials: {
-                username: infrastructureConfig.databaseUsername,
-                password: dbCredentialSecrets.secretValueFromJson('password')
-            },
-            subnetGroup: dbSubnetGroup
-            // TODO: create the database monitoring role so it's not created automatically -- replicate 'AWSServiceRoleForRDS' role
-            // monitoringRole: databaseMonitoringRole
-        });
-        Tags.of(rdsCluster).add(TagEnum.APPLICATION_ID, appId);
-        Tags.of(rdsCluster).add(TagEnum.NAME, `${infrastructureConfig.databaseName}-${appId}-${region}-db`);
+                allowAllOutbound: true
+            });
+            dbSecurityGroup.applyRemovalPolicy(infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN);
+            dbSecurityGroup.addIngressRule(
+                // NOTE: for added security, can allow ONLY connections from the lambda security group
+                infrastructureConfig.isInternal ? Peer.ipv4(infrastructureConfig.vpcCIDR) : Peer.anyIpv4(),
+                Port.tcp(5432)
+            );
+            Tags.of(dbSecurityGroup).add(TagEnum.APPLICATION_ID, appId);
+            Tags.of(dbSecurityGroup).add(TagEnum.NAME, `${infrastructureConfig.appName}-${appId}-${region}-rds-sg`);
 
+            const dbCredentialSecrets = new Secret(this, 'ServerlessDbSecrets', {
+                secretName: `${infrastructureConfig.databaseClusterName}-credentials`,
+                generateSecretString: {
+                    secretStringTemplate: JSON.stringify({
+                        username: infrastructureConfig.databaseName
+                    }),
+                    excludePunctuation: true,
+                    includeSpace: false,
+                    generateStringKey: 'password'
+                }
+            });
+            Tags.of(dbCredentialSecrets).add(TagEnum.APPLICATION_ID, appId);
+            Tags.of(dbCredentialSecrets).add(TagEnum.NAME, `${infrastructureConfig.databaseClusterName}-${appId}-${region}-credentials`);
+
+            const dbEngine = DatabaseClusterEngine.auroraPostgres({ version: AuroraPostgresEngineVersion.VER_13_7 });
+
+            const rdsCluster = new DatabaseCluster(this, 'ServerlessDbCluster', {
+                defaultDatabaseName: (region === infrastructureConfig.regions.primary) ? infrastructureConfig.databaseName : undefined,
+                engine: dbEngine,
+                parameterGroup: ParameterGroup.fromParameterGroupName(this, 'ServerlessDbParameterGroup', infrastructureConfig.databaseParameterGroupName),
+                instanceProps: {
+                    instanceType: InstanceType.of(InstanceClass.R5, InstanceSize.LARGE),
+                    vpc: vpc,
+                    vpcSubnets: {
+                        subnetGroupName: infrastructureConfig.vpcSubnetGroupNames[1]
+                    },
+                    publiclyAccessible: !infrastructureConfig.isInternal,
+                    securityGroups: [dbSecurityGroup]
+                },
+                clusterIdentifier: `${infrastructureConfig.databaseClusterName}-${appId}-${region}`,
+                removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN,
+                storageEncryptionKey: kmsKey,
+                credentials: (region === infrastructureConfig.regions.primary) ? {
+                    username: infrastructureConfig.databaseUsername,
+                    password: dbCredentialSecrets.secretValueFromJson('password')
+                } : undefined,
+                subnetGroup: dbSubnetGroup
+            });
+            const cfnRdsCluster = (rdsCluster.node.defaultChild as CfnDBCluster);
+            cfnRdsCluster.globalClusterIdentifier = `${infrastructureConfig.globalDatabaseClusterName}-${appId}`;
+            // TODO: create the database monitoring role so it's not created automatically -- replicate 'AWSServiceRoleForRDS' role
+            // cfnRdsCluster.monitoringRoleArn = ``;
+
+            Tags.of(rdsCluster).add(TagEnum.APPLICATION_ID, appId);
+            Tags.of(rdsCluster).add(TagEnum.NAME, `${infrastructureConfig.databaseName}-${appId}-${region}-db`);
+        }
+
+        // #endregion
 
         // TODO: ensure traceability through x-ray; ideally make tracing optional (configurable, all-or-nothing)
 
