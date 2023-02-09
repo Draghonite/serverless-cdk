@@ -170,21 +170,5 @@ export class ServerlessPreInfrastructureStack extends cdk.Stack {
         });
 
         // #endregion
-
-        // #region Global RDS Cluster
-
-        const dbEngine = DatabaseClusterEngine.auroraPostgres({ version: AuroraPostgresEngineVersion.VER_13_7 });
-
-        const rdsGlobalCluster = new CfnGlobalCluster(this, 'ServerlessDbGlobalCluster', {
-            deletionProtection: !infrastructureConfig.isDevTesting,
-            engine: dbEngine.engineType,
-            engineVersion: dbEngine.engineVersion?.fullVersion,
-            globalClusterIdentifier: `${infrastructureConfig.globalDatabaseClusterName}-${appId}`,
-            storageEncrypted: true,
-        });
-        Tags.of(rdsGlobalCluster).add(TagEnum.APPLICATION_ID, appId);
-        Tags.of(rdsGlobalCluster).add(TagEnum.NAME, `${infrastructureConfig.globalDatabaseClusterName}-${appId}-db-global`);
-
-        // #endregion
     }
 }

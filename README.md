@@ -77,3 +77,4 @@ Use of this solution is for academic purposes only and neither this site nor con
 - https://aws.amazon.com/blogs/networking-and-content-delivery/starting-small-with-aws-global-accelerator/
 - https://repost.aws/questions/QUjISNyk6aTA6jZgZQwKWf4Q/how-to-connect-a-load-balancer-and-an-interface-vpc-endpoint-together-using-cdk
 - https://dev.to/wakeupmh/create-aurora-mysql-on-top-of-cdk-with-ts-3949
+- https://github.com/neilkuan/cdk-aurora-globaldatabase

@@ -73,32 +73,5 @@ export class ServerlessInfrastructureContentBucketStack extends cdk.Stack {
         }
 
         // #endregion
-
-        // #region Access Log Bucket
-
-        const accessLogBucket = new Bucket(this, 'ServerAppAccessLogBucket', {
-            bucketName: `${infrastructureConfig.accessLogsBucketName}-${appId}-${region}`,
-            versioned: false,
-            blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-            encryption: BucketEncryption.KMS,
-            encryptionKey: kmsEncryptionKey,
-            bucketKeyEnabled: true,
-            autoDeleteObjects: infrastructureConfig.isDevTesting,
-            removalPolicy: infrastructureConfig.isDevTesting ? RemovalPolicy.DESTROY : RemovalPolicy.RETAIN
-        });
-        // contentBucket.addToResourcePolicy(new PolicyStatement({
-        //     effect: Effect.ALLOW,
-        //     principals: [
-        //         new ArnPrincipal(Fn.sub(`arn:aws:iam::\${AWS::AccountId}:role/service-role/${infrastructureConfig.accessLoggingRoleName}-${appId}`))
-        //     ],
-        //     actions: [
-        //         "s3:PutObject"
-        //     ],
-        //     resources: [
-        //         `arn:aws:s3:::${infrastructureConfig.accessLogsBucketName}-${appId}-${region}/*`
-        //     ]
-        // }));
-
-        // #endregion
     }
 }
